@@ -126,6 +126,8 @@
 
   async function signOut() {
     closeMenu();
+    if (outbox.length && !window.confirm(`${outbox.length} change(s) on this phone have not synced yet and will be lost if you sign out. Sign out anyway?`)) return;
+    try { if (D && D.user) localStorage.removeItem(snapKey(D.user.id)); for (const e of outbox) await qDel(e.k); outbox = []; } catch (_) {}
     await sb.auth.signOut();
     D = null;
     $('email').value = '';
@@ -138,7 +140,16 @@
   let D = null; // everything for the signed-in partner's plantation
 
   async function loadAll() {
-    const { data: { user } } = await sb.auth.getUser();
+    const fresh = await loadServer();
+    if (fresh && fresh.me) { D = fresh; for (const e of outbox) applyLocal(e.ops); saveSnap(); }
+    return fresh;
+  }
+  async function loadServer() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return null;
+    if (!navigator.onLine) throw new Error('offline');
+    const { data: { user }, error: uerr } = await sb.auth.getUser();
+    if (uerr && isNetErr(uerr)) throw uerr;
     if (!user) return null;
     const claim = await sb.rpc('claim_membership'); // links first sign-in to the partner record; separate request
     if (claim.error) console.warn('claim_membership', claim.error);
@@ -190,7 +201,8 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data,
+      savedAt: new Date().toISOString()
     };
   }
 
@@ -208,6 +220,143 @@
     const grantIds = [...new Set(useRows.map((u) => D.receipts.find((r) => r.id === u.receipt_id)?.grant_id).filter(Boolean))];
     return { parts, blockNames, jobs, lastWork, next, grants: D.grants.filter((g) => grantIds.includes(g.id)), area: b.measured_acres ?? b.est_acres, measured: b.measured_acres != null, age: ageMonths(b.planted_on) };
   }
+
+  // ================= OFFLINE (Stage 7a) =================
+  // Last copy of the plantation is kept on the phone; field records made without signal wait in an outbox and sync later.
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 3) | 8).toString(16); }));
+  const isNetErr = (e) => !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed|offline|timeout|fetch/i.test(String((e && (e.message || e.error_description)) || e));
+  const TABLE_KEY = { jobs: 'jobs', job_batches: 'jb', contractors: 'contractors', harvest_picks: 'picks', pick_batches: 'pkb', buyers: 'buyers',
+    expenses: 'expenses', alerts: 'alerts', alert_actions: 'aa', attachments: 'atts', batches: 'batches' };
+
+  // tiny IndexedDB store for the outbox (photos are kept as blobs)
+  let dbp;
+  const idb = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('ladangkita', 1); r.onupgradeneeded = () => r.result.createObjectStore('outbox', { keyPath: 'k', autoIncrement: true }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const tx = async (mode, fn) => { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('outbox', mode); const s = t.objectStore('outbox'); const out = fn(s); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); }); };
+  const qAll = async () => { try { return await tx('readonly', (s) => s.getAll()); } catch (_) { return []; } };
+  const qAdd = (entry) => tx('readwrite', (s) => s.add(entry));
+  const qPut = (entry) => tx('readwrite', (s) => s.put(entry));
+  const qDel = (k) => tx('readwrite', (s) => s.delete(k));
+  let outbox = [];
+  const refreshOutbox = async () => { outbox = await qAll(); netBar(); };
+
+  // saved copy of the plantation
+  const snapKey = (uid) => 'lk_snap_' + uid;
+  function saveSnap() { if (!D || !D.me) return; try { const { user, ...rest } = D; localStorage.setItem(snapKey(D.user.id), JSON.stringify({ ...rest, user: { id: user.id, email: user.email }, savedAt: D.savedAt || new Date().toISOString() })); } catch (_) { /* phone storage full: keep going */ } }
+  function readSnap(uid) { try { const s = localStorage.getItem(snapKey(uid)); return s ? JSON.parse(s) : null; } catch (_) { return null; } }
+
+  // apply a list of changes to the copy in memory, so the screens show them straight away
+  function applyLocal(ops) {
+    for (const o of ops) {
+      const key = TABLE_KEY[o.table];
+      if (!key || !D[key]) continue;
+      if (o.op === 'insert') for (const r of o.rows) { if (!r.id || !D[key].some((x) => x.id === r.id)) D[key].push({ created_at: new Date().toISOString(), ...r }); }
+      else if (o.op === 'update') D[key].filter((r) => Object.entries(o.eq).every(([k, v]) => String(r[k]) === String(v))).forEach((r) => Object.assign(r, o.values));
+      else if (o.op === 'delete') D[key] = D[key].filter((r) => !(Object.entries(o.eq || {}).every(([k, v]) => String(r[k]) === String(v)) && (!o.in || o.in[1].map(String).includes(String(r[o.in[0]])))));
+    }
+  }
+
+  async function runOp(o) {
+    if (o.op === 'upload') {
+      const r = await sb.storage.from('files').upload(o.path, o.blob, { contentType: o.type, upsert: false });
+      if (r.error && !/exists|duplicate/i.test(r.error.message)) throw r.error;
+      return;
+    }
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let q;
+      if (o.op === 'insert') q = sb.from(o.table).insert(o.rows);
+      else if (o.op === 'update') { q = sb.from(o.table).update(o.values); for (const [k, v] of Object.entries(o.eq)) q = q.eq(k, v); }
+      else if (o.op === 'delete') { q = sb.from(o.table).delete(); for (const [k, v] of Object.entries(o.eq || {})) q = q.eq(k, v); if (o.in) q = q.in(o.in[0], o.in[1]); }
+      const { error } = await q;
+      if (!error) return;
+      const m = error.message || '';
+      if (o.op === 'insert' && /_pkey|already exists/i.test(m)) return; // it was saved before the signal dropped
+      if (o.op === 'insert' && o.refPrefix && /duplicate|unique/i.test(m)) {
+        // another partner used the same number meanwhile: take the next free one
+        const { data } = await sb.from(o.table).select('ref').eq('plantation_id', o.rows[0].plantation_id);
+        const used = (data || []).concat(D[TABLE_KEY[o.table]] || []);
+        const old = o.rows[0].ref;
+        o.rows[0].ref = nextRef(o.refPrefix, used);
+        const local = (D[TABLE_KEY[o.table]] || []).find((x) => x.id === o.rows[0].id); if (local) local.ref = o.rows[0].ref;
+        if (location.hash.endsWith('-' + old)) location.hash = location.hash.replace(old, o.rows[0].ref);
+        continue;
+      }
+      throw error;
+    }
+  }
+  async function runOps(ops) { for (let i = 0; i < ops.length; i++) { try { await runOp(ops[i]); } catch (e) { e.done = i; throw e; } } }
+
+  // Save a change: straight to the database when there is signal, otherwise into the outbox.
+  async function commit(ops, msg, opts = {}) {
+    if (navigator.onLine) {
+      try {
+        await runOps(ops);
+        if (opts.reload === false) { applyLocal(ops); saveSnap(); } else await refresh(msg);
+        return 'saved';
+      } catch (e) {
+        if (!isNetErr(e)) throw e;
+        ops = ops.slice(e.done || 0);
+      }
+    }
+    await qAdd({ ops, label: opts.label || msg || 'Change', ts: Date.now() });
+    applyLocal(ops); saveSnap(); await refreshOutbox();
+    if (opts.reload !== false) { route(); toast('Saved on this phone. It will sync when you have signal.'); }
+    return 'queued';
+  }
+
+  let syncing = false;
+  async function flushOutbox() {
+    if (syncing || !navigator.onLine) return;
+    const list = await qAll();
+    if (!list.length) return;
+    syncing = true; netBar();
+    try { await sb.auth.getSession(); } catch (_) { /* refreshes an expired login when signal is back */ }
+    let sent = 0;
+    for (const entry of list) {
+      if (entry.error && !entry.retry) continue;
+      try { await runOps(entry.ops); await qDel(entry.k); sent++; }
+      catch (e) {
+        if (isNetErr(e)) break;
+        entry.ops = entry.ops.slice(e.done || 0); entry.error = friendly(e); entry.retry = false; await qPut(entry);
+      }
+    }
+    syncing = false;
+    await refreshOutbox();
+    if (sent && D && D.me) { try { D = await loadAll(); route(); } catch (_) { /* stay on the copy */ } toast(`${sent} change${sent > 1 ? 's' : ''} synced`); }
+  }
+
+  function netBar() {
+    const b = $('net');
+    if (!b || !D || !D.me) { if (b) b.hidden = true; return; }
+    const waiting = outbox.filter((e) => !e.error).length;
+    const failed = outbox.filter((e) => e.error);
+    const parts = [];
+    if (!navigator.onLine) parts.push('No signal');
+    if (D.offline && D.savedAt) parts.push(`showing your copy from ${ago(D.savedAt)}`);
+    if (syncing) parts.push('syncing…');
+    else if (waiting) parts.push(`${waiting} change${waiting > 1 ? 's' : ''} waiting to sync`);
+    b.replaceChildren();
+    b.className = 'net' + (failed.length ? ' bad' : navigator.onLine ? '' : ' off');
+    if (parts.length) b.append(h('span', {}, parts.join(' · ')));
+    if (failed.length) b.append(h('button', { type: 'button', onclick: showFailed }, `${failed.length} could not be saved · see`));
+    b.hidden = !parts.length && !failed.length;
+  }
+  function showFailed() {
+    const f = $('sheet');
+    const failed = outbox.filter((e) => e.error);
+    f.onsubmit = (e) => e.preventDefault(); f.oninput = null; f.onchange = null;
+    f.replaceChildren(h('div', { class: 'h sheet-title' }, 'Changes that could not be saved'),
+      h('p', { class: 'muted small' }, 'These were made without signal, but the database refused them when they were sent. Try again, or discard them and enter them again.'),
+      ...failed.map((e) => h('div', { class: 'pay-items' }, h('div', { class: 'pi' }, h('b', {}, e.label), h('span', {}, new Date(e.ts).toLocaleString('en-MY'))), h('div', { class: 'err' }, e.error),
+        h('div', { class: 'sheet-btns' },
+          h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await qDel(e.k); await refreshOutbox(); closeSheet(); await refresh('Discarded'); } }, 'Discard'),
+          h('button', { class: 'btn primary', type: 'button', onclick: async () => { e.retry = true; delete e.error; await qPut(e); closeSheet(); await flushOutbox(); } }, 'Try again')))),
+      h('button', { class: 'btn ghost', type: 'button', onclick: closeSheet }, 'Close'));
+    $('sheet-wrap').hidden = false; document.body.classList.add('sheet-open');
+  }
+  window.addEventListener('online', async () => { netBar(); await flushOutbox(); if (D && D.offline) { try { D = await loadAll(); route(); } catch (_) {} } netBar(); });
+  window.addEventListener('offline', netBar);
+  setInterval(() => { if (navigator.onLine && outbox.some((e) => !e.error)) flushOutbox(); }, 30000);
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
 
   // ================= ROUTER =================
   const TABS = { status: 'status', map: 'map', jobs: 'jobs', sales: 'sales', exp: 'exp', finance: 'finance' };
@@ -229,8 +378,8 @@
   $('back').addEventListener('click', (e) => { if (history.length > 1 && $('back').dataset.useHistory) { e.preventDefault(); history.back(); } });
 
   async function refresh(msg) {
-    try { D = await loadAll(); } catch (e) { return toast(friendly(e)); }
-    route();
+    try { D = await loadAll(); } catch (e) { if (isNetErr(e)) { route(); if (msg) toast(msg); return; } return toast(friendly(e)); }
+    route(); netBar();
     if (msg) toast(msg);
   }
 
@@ -244,7 +393,7 @@
   // ---------- bottom sheet form ----------
   // fields: {key,label,type:'text'|'email'|'tel'|'number'|'date'|'select'|'textarea'|'chips'|'head'|'note'|'info',
   //          value,options,ph,mode,note,required,list,showIf:(vals)=>bool,node}
-  function openSheet(title, fields, onSave, saveLabel = 'Save', danger = false) {
+  function openSheet(title, fields, onSave, saveLabel = 'Save', danger = false, offlineOk = false) {
     const f = $('sheet');
     f.replaceChildren();
     f.append(h('div', { class: 'h sheet-title' }, title));
@@ -298,6 +447,7 @@
         else if (v === '') v = null;
         vals[fd.key] = v;
       }
+      if (!offlineOk && !navigator.onLine) { err.textContent = 'This needs signal, because it changes money or settings shared by all partners. Do it when you are back online.'; err.hidden = false; return; }
       busy(save, true, 'Saving…');
       try { await onSave(vals); closeSheet(); }
       catch (ex) { err.textContent = friendly(ex); err.hidden = false; }
@@ -437,10 +587,8 @@
       { key: 'measured_acres', label: 'Measured area (acres)', type: 'number', mode: 'decimal', value: b.measured_acres, ph: `Estimated ${b.est_acres ?? '—'} ac`, note: 'Leave empty to keep using the estimate from the plant count.' },
       { key: 'notes', label: 'Notes', type: 'textarea', value: b.notes }
     ], async (v) => {
-      const { error } = await sb.from('batches').update(v).eq('id', b.id);
-      if (error) throw error;
-      await refresh('Saved');
-    });
+      await commit([{ op: 'update', table: 'batches', values: v, eq: { id: b.id } }], 'Saved', { label: `${b.name} details` });
+    }, 'Save', false, true);
   }
 
   // ---------- Partners ----------
@@ -722,9 +870,9 @@
     if (step) root.append(h('button', { class: 'btn primary', type: 'button', onclick: async (e) => {
       busy(e.currentTarget, true, 'Saving…');
       const st = step[1] === 'Done' && j.price != null ? 'To pay' : step[1];
-      const { error } = await sb.from('jobs').update({ status: st, start_on: j.start_on || (st === 'In progress' ? today() : null) }).eq('id', j.id);
-      if (error) { toast(friendly(error)); busy(e.currentTarget, false, step[0]); return; }
-      await refresh(step[1] === 'Done' && j.price == null ? 'Marked done. Enter the price so it can be paid.' : 'Saved');
+      const btn = e.currentTarget;
+      try { await commit([{ op: 'update', table: 'jobs', values: { status: st, start_on: j.start_on || (st === 'In progress' ? today() : null) }, eq: { id: j.id } }], step[1] === 'Done' && j.price == null ? 'Marked done. Enter the price so it can be paid.' : 'Saved', { label: `${j.ref} ${step[0].toLowerCase()}` }); }
+      catch (ex) { toast(friendly(ex)); busy(btn, false, step[0]); }
     } }, step[0]));
     if (j.status === 'To pay' && j.contractor_id) root.append(h('a', { class: 'btn primary', href: '#jobs-c-' + j.contractor_id }, `Pay ${who}`));
     if (j.status !== 'Paid') root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => jobForm(j) }, 'Edit / complete this record'));
@@ -763,42 +911,28 @@
       { key: 'price', label: 'Agreed price (RM)', type: 'number', mode: 'decimal', value: j?.price, ph: 'e.g. 1800', note: 'When a job is done and has a price, it becomes "To pay".' },
       { key: 'note', label: 'Notes', type: 'textarea', value: j?.note, ph: 'e.g. paid in cash before using the app' }
     ], async (v) => {
+      const P = D.plantation.id, ops = [];
       let contractor_id = null, contractor_name = null;
       if (v.contractor) {
         const found = D.contractors.find((c) => c.name.trim().toLowerCase() === v.contractor.toLowerCase());
         if (found) { contractor_id = found.id; contractor_name = found.name; }
-        else {
-          const { data, error } = await sb.from('contractors').insert({ plantation_id: D.plantation.id, name: v.contractor }).select('id, name').single();
-          if (error) throw error;
-          contractor_id = data.id; contractor_name = data.name;
-        }
+        else { contractor_id = uuid(); contractor_name = v.contractor; ops.push({ op: 'insert', table: 'contractors', rows: [{ id: contractor_id, plantation_id: P, name: v.contractor }] }); }
       }
       const status = v.status === 'Done' && v.price != null ? 'To pay' : v.status;
       const row = { category: v.category, other_note: v.category === 'Upah Lain-lain' ? v.other_note : null, products: v.products, method: v.method,
         contractor_id, contractor_name, start_on: v.start_on, date_note: v.start_on ? null : v.date_note, status, price: v.price, note: v.note };
       let id = j?.id, ref = j?.ref;
-      if (isNew) {
-        let tries = 0, res;
-        do {
-          ref = nextRef('J-', D.jobs.concat(tries ? [{ ref: ref }] : []));
-          res = await sb.from('jobs').insert({ ...row, plantation_id: D.plantation.id, ref, created_by: D.me.id }).select('id').single();
-          tries++;
-        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
-        if (res.error) throw res.error;
-        id = res.data.id;
-      } else {
-        const { error } = await sb.from('jobs').update(row).eq('id', id);
-        if (error) throw error;
-      }
+      if (isNew) { id = uuid(); ref = nextRef('J-', D.jobs); ops.push({ op: 'insert', table: 'jobs', rows: [{ ...row, id, plantation_id: P, ref, created_by: D.me.id }], refPrefix: 'J-' }); }
+      else ops.push({ op: 'update', table: 'jobs', values: row, eq: { id } });
       const want = new Set(v.batches || []);
       const have = new Set(D.jb.filter((x) => x.job_id === id).map((x) => x.batch_id));
-      const add = [...want].filter((b) => !have.has(b)).map((b) => ({ job_id: id, batch_id: b, plantation_id: D.plantation.id }));
-      const del = [...have].filter((b) => !want.has(b));
-      if (add.length) { const { error } = await sb.from('job_batches').insert(add); if (error) throw error; }
-      if (del.length) { const { error } = await sb.from('job_batches').delete().eq('job_id', id).in('batch_id', del); if (error) throw error; }
-      await refresh(isNew ? `${ref} saved` : 'Saved');
-      if (isNew) location.hash = '#job-' + ref;
-    }, isNew ? 'Save job' : 'Save changes');
+      const add = [...want].filter((x) => !have.has(x)).map((x) => ({ job_id: id, batch_id: x, plantation_id: P }));
+      const del = [...have].filter((x) => !want.has(x));
+      if (add.length) ops.push({ op: 'insert', table: 'job_batches', rows: add });
+      if (del.length) ops.push({ op: 'delete', table: 'job_batches', eq: { job_id: id }, in: ['batch_id', del] });
+      await commit(ops, isNew ? `${ref} saved` : 'Saved', { label: isNew ? `New job ${ref}` : `Edit ${ref}` });
+      if (isNew) location.hash = '#job-' + (D.jobs.find((x) => x.id === id)?.ref || ref);
+    }, isNew ? 'Save job' : 'Save changes', false, true);
   }
 
   function contractorForm(c) {
@@ -891,7 +1025,7 @@
             try { await upload(entity, id, kind, f); } catch (ex) { toast(friendly(ex)); }
           }
           status.textContent = '';
-          await reloadAtts(); draw();
+          draw();
         } });
         return h('label', { class: 'btn ghost up' }, inp, label);
       };
@@ -923,12 +1057,11 @@
       try { if (max || !/jpe?g|png|webp/.test(type)) { blob = await shrink(file, max || 4096); ext = 'jpg'; type = 'image/jpeg'; } } catch (_) { /* keep the original file */ }
     }
     if (blob.size > 10 * 1024 * 1024) throw new Error('This file is over 10 MB. Please pick a smaller one.');
-    const uid = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random().toString(16).slice(2);
-    const path = `${D.plantation.id}/${entity}/${id}/${uid}.${ext}`;
-    const up = await sb.storage.from('files').upload(path, blob, { contentType: type, upsert: false });
-    if (up.error) throw up.error;
-    const { error } = await sb.from('attachments').insert({ plantation_id: D.plantation.id, entity, entity_id: id, kind, storage_path: path, bytes: blob.size, created_by: D.me.id });
-    if (error) { await sb.storage.from('files').remove([path]); throw error; }
+    const path = `${D.plantation.id}/${entity}/${id}/${uuid()}.${ext}`;
+    urlCache.set(path, URL.createObjectURL(blob));
+    await commit([{ op: 'upload', path, blob, type },
+      { op: 'insert', table: 'attachments', rows: [{ id: uuid(), plantation_id: D.plantation.id, entity, entity_id: id, kind, storage_path: path, bytes: blob.size, created_by: D.me.id }] }],
+      null, { reload: false, label: `${kind} on ${entity}` });
   }
   async function shrink(file, max) {
     const bmp = await createImageBitmap(file);
@@ -1066,6 +1199,7 @@
       { type: 'info', render: (r) => { const f = num(r.grade_a) + num(r.grade_b) + num(r.grade_c); const t = num(r.grade_a) * num(r.price_a) + num(r.grade_b) * num(r.price_b) + num(r.grade_c) * num(r.price_c); return h('div', { class: 'live-total' }, h('span', {}, `${fmt(f)} fruit`, h('small', {}, isNew && last.ref ? `Prices filled in from ${last.ref}; change them if today's differ.` : '')), h('span', {}, rm(t))); } });
     fields.push({ key: 'note', label: 'Notes', type: 'textarea', value: k?.note, ph: 'e.g. weighed 1,250 kg; lorry from FAMA' });
     openSheet(isNew ? 'Record a harvest pick' : `Edit ${k.ref}`, fields, async (v) => {
+      const P = D.plantation.id, ops = [];
       const row = { picked_on: v.picked_on, note: v.note };
       if (!locked) {
         for (const g of ['grade_a', 'grade_b', 'grade_c']) { row[g] = Math.round(v[g] || 0); if (v[g] && !Number.isInteger(v[g])) throw new Error('Fruit counts must be whole numbers.'); }
@@ -1076,36 +1210,21 @@
         if (v.buyer) {
           const found = D.buyers.find((b) => b.name.trim().toLowerCase() === v.buyer.toLowerCase());
           if (found) { row.buyer_id = found.id; row.buyer_name = found.name; }
-          else {
-            const { data, error } = await sb.from('buyers').insert({ plantation_id: D.plantation.id, name: v.buyer }).select('id, name').single();
-            if (error) throw error;
-            row.buyer_id = data.id; row.buyer_name = data.name;
-          }
+          else { row.buyer_id = uuid(); row.buyer_name = v.buyer; ops.push({ op: 'insert', table: 'buyers', rows: [{ id: row.buyer_id, plantation_id: P, name: v.buyer }] }); }
         }
       }
       let id = k?.id, ref = k?.ref;
-      if (isNew) {
-        let tries = 0, res;
-        do {
-          ref = nextRef('HP-', D.picks.concat(tries ? [{ ref }] : []));
-          res = await sb.from('harvest_picks').insert({ ...row, plantation_id: D.plantation.id, ref, created_by: D.me.id }).select('id').single();
-          tries++;
-        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
-        if (res.error) throw res.error;
-        id = res.data.id;
-      } else {
-        const { error } = await sb.from('harvest_picks').update(row).eq('id', id);
-        if (error) throw error;
-      }
+      if (isNew) { id = uuid(); ref = nextRef('HP-', D.picks); ops.push({ op: 'insert', table: 'harvest_picks', rows: [{ ...row, id, plantation_id: P, ref, created_by: D.me.id }], refPrefix: 'HP-' }); }
+      else ops.push({ op: 'update', table: 'harvest_picks', values: row, eq: { id } });
       const want = new Set(v.batches || []);
       const have = new Set(D.pkb.filter((x) => x.pick_id === id).map((x) => x.batch_id));
-      const add = [...want].filter((b) => !have.has(b)).map((b) => ({ pick_id: id, batch_id: b, plantation_id: D.plantation.id }));
-      const del = [...have].filter((b) => !want.has(b));
-      if (add.length) { const { error } = await sb.from('pick_batches').insert(add); if (error) throw error; }
-      if (del.length) { const { error } = await sb.from('pick_batches').delete().eq('pick_id', id).in('batch_id', del); if (error) throw error; }
-      await refresh(isNew ? `${ref} saved` : 'Saved');
-      if (isNew) location.hash = '#pick-' + ref;
-    }, isNew ? 'Save pick' : 'Save changes');
+      const add = [...want].filter((x) => !have.has(x)).map((x) => ({ pick_id: id, batch_id: x, plantation_id: P }));
+      const del = [...have].filter((x) => !want.has(x));
+      if (add.length) ops.push({ op: 'insert', table: 'pick_batches', rows: add });
+      if (del.length) ops.push({ op: 'delete', table: 'pick_batches', eq: { pick_id: id }, in: ['batch_id', del] });
+      await commit(ops, isNew ? `${ref} saved` : 'Saved', { label: isNew ? `New harvest pick ${ref}` : `Edit ${ref}` });
+      if (isNew) location.hash = '#pick-' + (D.picks.find((x) => x.id === id)?.ref || ref);
+    }, isNew ? 'Save pick' : 'Save changes', false, true);
   }
 
   function buyerForm(b) {
@@ -1276,22 +1395,11 @@
     ], async (v) => {
       if (!(v.amount > 0)) throw new Error('Amount must be more than RM 0.');
       const row = { type: v.type, what: v.what, amount: Math.round(v.amount * 100) / 100, spent_on: v.spent_on, paid_from_pool: v.who === 'pool', member_id: v.who === 'pool' ? null : v.who };
-      let ref = e?.ref;
-      if (isNew) {
-        let tries = 0, res;
-        do {
-          ref = nextRef('EX-', D.expenses.concat(tries ? [{ ref }] : []));
-          res = await sb.from('expenses').insert({ ...row, plantation_id: D.plantation.id, ref }).select('id').single();
-          tries++;
-        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
-        if (res.error) throw res.error;
-      } else {
-        const { error } = await sb.from('expenses').update(row).eq('id', e.id);
-        if (error) throw error;
-      }
-      await refresh(isNew ? `${ref} saved` : 'Saved');
-      if (isNew) location.hash = '#ex-' + ref;
-    }, isNew ? 'Save expense' : 'Save changes');
+      let ref = e?.ref; const id = e?.id || uuid();
+      const op = isNew ? { op: 'insert', table: 'expenses', rows: [{ ...row, id, plantation_id: D.plantation.id, ref: (ref = nextRef('EX-', D.expenses)) }], refPrefix: 'EX-' } : { op: 'update', table: 'expenses', values: row, eq: { id } };
+      await commit([op], isNew ? `${ref} saved` : 'Saved', { label: isNew ? `New expense ${ref}` : `Edit ${ref}` });
+      if (isNew) location.hash = '#ex-' + (D.expenses.find((x) => x.id === id)?.ref || ref);
+    }, isNew ? 'Save expense' : 'Save changes', false, true);
   }
 
   // ---------- claims ----------
@@ -1541,16 +1649,10 @@
       { key: 'description', label: 'What happened', type: 'textarea', required: true, ph: 'e.g. Fence broken on east side, about 40 plants uprooted' },
       { type: 'note', label: 'After sending, add photos on the alert page.' }
     ], async (v) => {
-      let ref, tries = 0, res;
-      do {
-        ref = nextRef('AL-', D.alerts.concat(tries ? [{ ref }] : []));
-        res = await sb.from('alerts').insert({ plantation_id: D.plantation.id, ref, type: v.type, location: v.location, urgency: v.urgency, description: v.description, status: 'Open', reported_by: D.me.id, reported_at: new Date().toISOString() }).select('id').single();
-        tries++;
-      } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
-      if (res.error) throw res.error;
-      await refresh('Alert sent');
-      location.hash = '#alert-' + ref;
-    }, 'Send alert', true);
+      const id = uuid(), ref = nextRef('AL-', D.alerts);
+      await commit([{ op: 'insert', table: 'alerts', rows: [{ id, plantation_id: D.plantation.id, ref, type: v.type, location: v.location, urgency: v.urgency, description: v.description, status: 'Open', reported_by: D.me.id, reported_at: new Date().toISOString() }], refPrefix: 'AL-' }], 'Alert sent', { label: `Alert ${ref}` });
+      location.hash = '#alert-' + (D.alerts.find((x) => x.id === id)?.ref || ref);
+    }, 'Send alert', true, true);
   }
 
   PAGES.alerts = (root) => {
@@ -1575,17 +1677,14 @@
     const acts = alActions(a);
     root.append(card(acts.length ? acts.map((x) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, x.action), h('small', {}, `${memberName(x.member_id)} · ${ago(x.created_at)}`)))) : h('p', { class: 'muted' }, 'No actions yet.')));
     const save = async (text, close) => {
-      const { error } = await sb.from('alert_actions').insert({ alert_id: a.id, plantation_id: D.plantation.id, member_id: D.me.id, action: text });
-      if (error) throw error;
       const upd = close ? { status: 'Closed', closed_at: new Date().toISOString(), closed_by: D.me.id } : { status: 'Action taken' };
-      const r = await sb.from('alerts').update(upd).eq('id', a.id);
-      if (r.error) throw r.error;
-      await refresh(close ? 'Alert closed' : 'Action added');
+      await commit([{ op: 'insert', table: 'alert_actions', rows: [{ id: uuid(), alert_id: a.id, plantation_id: D.plantation.id, member_id: D.me.id, action: text, created_at: new Date().toISOString() }] },
+        { op: 'update', table: 'alerts', values: upd, eq: { id: a.id } }], close ? 'Alert closed' : 'Action added', { label: `${a.ref} ${close ? 'closed' : 'action'}` });
     };
     if (!closed) {
       root.append(h('div', { class: 'alert-btns' },
-        h('button', { class: 'btn primary', type: 'button', onclick: () => openSheet('Add an action', [{ key: 'action', label: 'What was done', type: 'textarea', required: true, ph: 'e.g. Fence repaired by Rosli Jentera, RM 350' }], (v) => save(v.action, false), 'Add action') }, 'Add action'),
-        h('button', { class: 'btn ghost', type: 'button', onclick: () => openSheet(`Close ${a.ref}`, [{ key: 'action', label: 'Closing note', type: 'textarea', required: true, ph: 'e.g. All fixed; checked on site' }], (v) => save(v.action, true), 'Close alert') }, 'Close alert')));
+        h('button', { class: 'btn primary', type: 'button', onclick: () => openSheet('Add an action', [{ key: 'action', label: 'What was done', type: 'textarea', required: true, ph: 'e.g. Fence repaired by Rosli Jentera, RM 350' }], (v) => save(v.action, false), 'Add action', false, true) }, 'Add action'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => openSheet(`Close ${a.ref}`, [{ key: 'action', label: 'Closing note', type: 'textarea', required: true, ph: 'e.g. All fixed; checked on site' }], (v) => save(v.action, true), 'Close alert', false, true) }, 'Close alert')));
     } else if (D.isAdmin) {
       root.append(h('button', { class: 'btn link', type: 'button', onclick: async () => { const { error } = await sb.from('alerts').update({ status: 'Action taken', closed_at: null, closed_by: null }).eq('id', a.id); if (error) return toast(friendly(error)); await refresh('Alert reopened'); } }, 'Reopen this alert'));
     }
@@ -1807,12 +1906,20 @@
   // ================= START =================
   async function start() {
     show('loading', 'Loading', 'Getting your plantation');
+    await refreshOutbox();
+    await flushOutbox();
     try { D = await loadAll(); }
-    catch (e) { show('email', 'Sign in', 'Pineapple plantation records'); return showErr('page-err', 'Could not load your plantation: ' + friendly(e)); }
+    catch (e) {
+      const { data: { session } } = await sb.auth.getSession();
+      const snap = session && isNetErr(e) ? readSnap(session.user.id) : null;
+      if (snap) { D = { ...snap, offline: true }; for (const x of outbox) applyLocal(x.ops); show('app', D.plantation.name, ''); route(); netBar(); return; }
+      show('email', 'Sign in', 'Pineapple plantation records');
+      return showErr('page-err', isNetErr(e) ? 'No signal, and this phone has no saved copy yet. Open the app once with signal first.' : 'Could not load your plantation: ' + friendly(e));
+    }
     if (!D) return show('email', 'Sign in', 'Pineapple plantation records');
     if (!D.me) { $('nm-email').textContent = D.user.email; return show('nomember', 'Almost there', 'Your email is not on a plantation yet'); }
     show('app', D.plantation.name, '');
-    route();
+    route(); netBar();
   }
 
   sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT' && D) { D = null; show('email', 'Sign in', 'Pineapple plantation records'); } });

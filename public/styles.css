@@ -268,3 +268,9 @@ a.alert-item{text-decoration:none;gap:3px}
 .rep-row .lrow{flex:1;border-bottom:0}
 .doc-ico{width:40px;height:40px;border-radius:8px;background:var(--green-l);color:var(--green);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:12px;flex:none}
 .thumb-x.rel{position:static;flex:none}
+
+/* ---------- Stage 7a: offline status bar ---------- */
+.net{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 12px;padding:8px 16px;background:#FFF6DF;color:#4A3A10;border-bottom:1px solid #EAD49A;font-size:13px;font-weight:600;text-align:center}
+.net.off{background:#3A403C;color:#fff;border-color:#3A403C}
+.net.bad{background:#FDECEA;color:var(--red);border-color:#F5B9A5}
+.net button{font:inherit;font-size:13px;background:#fff;color:var(--red);border:1px solid currentColor;border-radius:999px;padding:4px 10px;min-height:32px;cursor:pointer}
