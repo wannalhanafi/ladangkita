@@ -148,7 +148,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -161,7 +161,7 @@
       q('material_uses'),
       q('grants').order('ref'),
       q('agencies'),
-      q('alerts', 'id, ref, type, location, urgency, status').neq('status', 'Closed'),
+      q('alerts'),
       q('cost_categories').order('sort'),
       q('contractors').order('name'),
       q('contractor_payments').order('ref'),
@@ -175,9 +175,11 @@
       q('receipt_picks'),
       q('expenses'),
       q('claims').order('ref'),
-      q('claim_expenses')
+      q('claim_expenses'),
+      q('purchases'),
+      q('alert_actions')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -187,7 +189,7 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data
     };
   }
 
@@ -215,7 +217,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || PAGES.home;
-    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp' }[name] || '';
+    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -322,15 +324,7 @@
   // ---------- Home ----------
   PAGES.home = (root) => {
     setHead(D.plantation.name, `${D.isAdmin ? 'Admin' : 'Partner'} · ${D.me.display_name}`);
-    const open = D.alerts;
-    if (open.length) {
-      root.append(h('div', { class: 'alert-red' },
-        h('div', { class: 'h ah' }, svg('<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>'), `${open.length} urgent issue${open.length > 1 ? 's' : ''} open`),
-        open.map((a) => h('div', { class: 'alert-item' }, h('b', {}, `${a.type}${a.location ? ' · ' + a.location : ''}`), h('small', {}, `${a.urgency} · ${a.status}`)))));
-    } else {
-      root.append(h('div', { class: 'alert-ok' }, svg('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'),
-        h('div', {}, h('div', { class: 'h' }, 'No alert'), h('small', {}, 'All clear on the plantation'))));
-    }
+    root.append(alertPanel());
     const plants = D.batches.reduce((s, b) => s + b.plants, 0);
     const toEnter = D.jobs.filter((j) => DONE.includes(j.status) && (j.price == null || !j.contractor_id)).length;
     const toPay = D.jobs.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0);
@@ -340,8 +334,9 @@
       kpi('Area', `${Number(D.plantation.area_acres || 0).toFixed(2)} ac`, `${D.blocks.length} blok`, '#status'),
       D.picks.length ? kpi('Sales', rm(D.picks.reduce((s, k) => s + pickAmt(k), 0)), owed ? `Buyers owe ${rm(owed)}` : 'All paid', '#sales')
         : kpi('Partners', fmt(D.members.filter((m) => m.active).length), D.isAdmin ? 'Tap to add' : 'In this plantation', '#partners'),
-      toPay ? kpi('To pay contractors', rm(toPay), `${D.jobs.filter((j) => j.status === 'To pay').length} jobs done`, '#jobs')
+      toPay ? kpi('To pay contractors', rm(toPay), (() => { const n = D.jobs.filter((j) => j.status === 'To pay').length; return `${n} job${n > 1 ? 's' : ''} done`; })(), '#jobs')
         : kpi('Jobs', fmt(D.jobs.length), toEnter ? `${toEnter} need contractor and cost` : 'All costs entered', toEnter ? '#jobs-none' : '#jobs')));
+    root.append(glance(money()));
     const upcoming = D.jobs.filter((j) => ['Planned', 'Quoted', 'In progress'].includes(j.status));
     root.append(sec('Coming up'));
     root.append(card(upcoming.length ? upcoming.map((j) => {
@@ -352,7 +347,7 @@
     if (waitingClaims.length) root.append(h('a', { class: 'banner amber-b', href: '#cl-' + waitingClaims[0].ref }, h('span', {}, h('b', {}, `${waitingClaims.length} partner claim${waitingClaims.length > 1 ? 's' : ''} to pay · ${rm(waitingClaims.reduce((s, c) => s + Number(c.amount), 0))}`), h('small', {}, waitingClaims.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '))), h('span', { class: 'chev' }, '›')));
     root.append(h('div', { class: 'quick' }, h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs'), h('a', { class: 'btn gold', href: '#sales' }, 'Sales'), h('a', { class: 'btn gold', href: '#exp' }, 'Expense')));
     if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
-    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Finance, Reports and Map are coming next. Everything you see here is your real plantation data.')));
+    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Reports (Excel and PDF), Map and offline recording are coming next. Everything you see here is your real plantation data.')));
   };
   const kpi = (l, v, sub, href) => h('a', { class: 'kpi', href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), sub ? h('div', { class: 's' }, sub) : null);
 
@@ -1360,12 +1355,246 @@
     }, 'Mark unpaid', true) }, 'Mark as not paid'));
   };
 
+  // ================= FINANCE (Stage 5) =================
+  const jobCost = (j) => (DONE.includes(j.status) && j.price != null ? Number(j.price) : 0);
+  function money() {
+    const pool = D.members.filter((m) => m.active).reduce((s, m) => s + Number(m.capital || 0), 0);
+    const by = {};
+    const add = (k, v) => { if (v) by[k] = (by[k] || 0) + v; };
+    for (const p of D.purchases) add(p.category, Number(p.amount || 0));
+    for (const j of D.jobs) add(j.category, jobCost(j));
+    for (const e of D.expenses) add('Perbelanjaan Rakan Kongsi', Number(e.amount || 0));
+    const spent = Object.values(by).reduce((s, v) => s + v, 0);
+    const sales = D.picks.reduce((s, k) => s + pickAmt(k), 0);
+    const received = D.rcs.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const paidOut = D.pays.reduce((s, p) => s + Number(p.amount || 0), 0) + D.purchases.reduce((s, p) => s + Number(p.amount || 0), 0)
+      + D.claims.filter((c) => c.status === 'Paid').reduce((s, c) => s + Number(c.amount || 0), 0) + D.expenses.filter((e) => e.paid_from_pool).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const owedOut = D.jobs.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0) + D.claims.filter((c) => c.status === 'Claimed').reduce((s, c) => s + Number(c.amount || 0), 0);
+    return { pool, by, spent, sales, profit: sales - spent, received, paidOut, cash: pool + received - paidOut, owedOut, unpriced: D.purchases.filter((p) => p.amount == null).length + D.jobs.filter((j) => DONE.includes(j.status) && j.price == null).length };
+  }
+
+  // Money at a glance: four bars around a zero line
+  function glance(M) {
+    const rows = [
+      ['Pooled', M.pool, '#2A6FB0', M.pool ? `Capital the partners put in: ${rm(M.pool)}.` : 'Capital not entered yet: add each partner\'s capital in ☰ Partners.'],
+      ['Spent', M.spent, '#D9930F', M.spent ? `${rm(M.spent)} spent so far${M.pool ? ', ' + Math.round(M.spent / M.pool * 100) + '% of the pool' : ''}.${M.unpriced ? ` ${M.unpriced} item${M.unpriced > 1 ? 's' : ''} still need a price.` : ''}` : `No costs entered yet.${M.unpriced ? ` ${M.unpriced} purchases and jobs are waiting for their price.` : ''}`],
+      ['Sales', M.sales, '#1E8A5A', M.sales ? `${rm(M.sales)} in sales so far.` : 'No harvest sold yet.'],
+      [M.profit < 0 ? 'Loss so far' : 'Profit so far', M.profit, M.profit < 0 ? '#C2410C' : '#1E8A5A', M.profit < 0 ? `Sales minus spending. A loss is normal before the first harvest; break-even needs ${rm(-M.profit)} more in sales.` : M.spent || M.sales ? 'Sales minus spending.' : 'Shows once costs and sales are entered.']
+    ];
+    const max = Math.max(1, ...rows.map((r) => Math.abs(r[1])));
+    const minNeg = Math.min(0, ...rows.map((r) => r[1]));
+    const neg = minNeg < 0;
+    const zero = neg ? Math.min(40, Math.max(12, -minNeg / (max - minNeg) * 100)) : 0;
+    const span = 100 - zero;
+    const note = h('div', { class: 'g-note' }, rows[3][3]);
+    const box = h('div', { class: 'card glance' }, h('div', { class: 'sec in' }, h('div', { class: 'h' }, 'Money at a glance'), h('small', { class: 'muted' }, 'Tap a bar')));
+    const bars = h('div', { class: 'g-bars' });
+    rows.forEach((r, i) => {
+      const v = r[1];
+      const w = v >= 0 ? (v / max) * span : Math.min(zero, (-v / -minNeg) * zero);
+      const left = v >= 0 ? zero : zero - w;
+      const b = h('button', { type: 'button', class: 'g-row' + (i === 3 ? ' on' : ''), 'aria-label': `${r[0]} ${rm(v)}`, onclick: (e) => { bars.querySelectorAll('.g-row').forEach((x) => x.classList.remove('on')); e.currentTarget.classList.add('on'); note.textContent = r[3]; } },
+        h('span', { class: 'g-top' }, h('span', {}, r[0]), h('b', {}, (v < 0 ? '−' : '') + rm(Math.abs(v)))),
+        h('span', { class: 'g-track' }, neg ? h('span', { class: 'g-zero', style: `left:${zero}%` }) : null, h('span', { class: 'g-bar', style: `left:${left}%;width:${Math.max(v ? 1.5 : 0, w)}%;background:${r[2]}` })));
+      bars.append(b);
+    });
+    box.append(bars, h('div', { class: 'g-scale' }, h('span', {}, neg ? '← loss' : ''), h('span', {}, neg ? 'line = RM 0' : ''), h('span', {}, `RM ${fmt(Math.round(max))} →`)), note);
+    return box;
+  }
+
+  PAGES.finance = (root) => {
+    setHead('Finance', `${D.plantation.name} · capital, costs and sales`);
+    const M = money();
+    root.append(h('div', { class: 'pool-card' },
+      h('small', {}, 'Capital pool'), h('div', { class: 'h' }, M.pool ? rm(M.pool) : 'Not entered yet'),
+      h('div', {}, `Costs so far ${rm(M.spent)} · Sales ${rm(M.sales)}`),
+      h('div', {}, M.profit < 0 ? `Loss so far ${rm(-M.profit)}` : `Profit so far ${rm(M.profit)}`),
+      M.pool ? h('small', {}, `Cash left in the pool, about ${rm(M.cash)}${M.owedOut ? ` (still to pay out ${rm(M.owedOut)})` : ''}`) : h('small', {}, 'Add each partner\'s capital in ☰ Partners to see the pool and shares.')));
+    const g = D.grants[0];
+    if (g) root.append(h('a', { class: 'banner', href: '#agencies' }, h('span', {}, h('b', {}, `Grants received: ${g.quantity || g.title}`), h('small', {}, `${g.ref} · ${g.title}${g.conditions ? ' · conditions: ' + g.conditions : ''}`)), h('span', { class: 'chev' }, '›')));
+
+    const act = D.members.filter((m) => m.active);
+    root.append(sec('Partners and profit shares'));
+    root.append(card(act.map((m) => {
+      const share = M.pool ? Number(m.capital || 0) / M.pool : 0;
+      return h('a', { class: 'trow', href: '#partner-' + m.id }, h('span', { class: 'avatar' }, initials(m.display_name)),
+        h('span', { class: 'lmain' }, h('b', {}, m.display_name), h('small', {}, `${rm(m.capital)} paid in${M.pool && M.profit ? ` · ${M.profit < 0 ? 'share of loss' : 'share of profit'} ${rm(Math.abs(M.profit) * share)}` : ''}`)),
+        h('span', { class: 'lright h share' }, M.pool ? (share * 100).toFixed(1) + '%' : '—'));
+    })));
+    root.append(h('p', { class: 'muted small foot' }, 'Profit is shared by capital paid in, after all costs. Landowners get rent only.'));
+
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => purchaseForm(null) }, '+ Record a purchase or payment'));
+    root.append(sec('Purchases'));
+    const list = [...D.purchases].sort((a, b) => String(b.purchased_on || '').localeCompare(String(a.purchased_on || '')) || b.ref.localeCompare(a.ref));
+    root.append(h('div', { class: 'card table' },
+      h('div', { class: 'mrow p ghead' }, h('span', {}, 'Category · item · from'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'For')),
+      list.length ? list.map((p) => h('div', { class: 'mrow p' },
+        h('span', {}, h('a', { href: '#buy-' + p.ref }, `${p.category}${p.item ? ' · ' + p.item : ''}`), h('small', {}, `${p.ref} · ${p.supplier || '—'} · ${p.purchased_on ? dstr(p.purchased_on) : p.date_note || 'date to set'}`)),
+        h('span', { class: 'num' }, p.amount != null ? money2(p.amount) : h('a', { class: 'pill amber', href: '#buy-' + p.ref }, 'Enter price')),
+        h('span', { class: 'small-t' }, p.for_batches || '—'))) : h('p', { class: 'muted' }, 'No purchases yet.')));
+    if (list.some((p) => p.amount == null)) root.append(h('p', { class: 'muted small foot' }, '"Enter price" = planting material from the planter\'s records, waiting for its price. Tap it to add the price.'));
+
+    root.append(sec('Where the money went'));
+    const cats = Object.entries(M.by).sort((a, b) => b[1] - a[1]);
+    root.append(card(cats.length ? cats.map(([k, v]) => h('div', { class: 'spend' }, h('div', { class: 'spend-top' }, h('span', {}, k), h('b', {}, rm(v))), h('div', { class: 'spend-track' }, h('div', { class: 'spend-bar', style: `width:${Math.max(1, v / M.spent * 100)}%` }))))
+      : h('p', { class: 'muted' }, 'No costs entered yet. Enter prices on the purchases above and costs on each job.')));
+    if (!M.sales) root.append(h('div', { class: 'card note' }, h('p', {}, 'No sales yet. Harvest sales show here as soon as picks are recorded in Sales.')));
+  };
+
+  PAGES.buy = (root, ref) => {
+    const p = D.purchases.find((x) => x.ref === ref);
+    if (!p) { location.hash = '#finance'; return; }
+    setHead(`${p.ref} · ${p.category}`, p.amount != null ? rm(p.amount) : 'Price to enter', ['Finance', '#finance']);
+    const mr = p.material_receipt_id ? D.receipts.find((r) => r.id === p.material_receipt_id) : null;
+    root.append(h('div', { class: 'card kvs' },
+      kv('Item', p.item, true), kv('Supplier', p.supplier), kv('Amount', p.amount != null ? rm(p.amount) : 'Not entered yet'),
+      kv('Date', p.purchased_on ? dstr(p.purchased_on) : p.date_note), kv('Paid by', p.paid_by),
+      kv('For', p.for_batches, true), p.other_note ? kv('Notes', p.other_note, true) : null,
+      mr ? kv('Planting material', h('a', { href: '#agencies' }, `${mr.ref} · ${fmt(mr.qty)} ${mr.type.toLowerCase()} from ${mr.source}`), true) : null));
+    root.append(h('button', { class: p.amount == null ? 'btn primary' : 'btn ghost', type: 'button', onclick: () => purchaseForm(p) }, p.amount == null ? 'Enter the price' : 'Edit this purchase'));
+    root.append(attachBox('purchase', p.id, 'Receipt & invoice'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${p.ref}?`, [{ type: 'note', label: `${p.category}${p.item ? ' · ' + p.item : ''} will be removed with its receipts. This cannot be undone.` }], async () => {
+      const paths = D.atts.filter((a) => a.entity === 'purchase' && a.entity_id === p.id).map((a) => a.storage_path);
+      if (paths.length) await sb.storage.from('files').remove(paths);
+      await sb.from('attachments').delete().eq('entity', 'purchase').eq('entity_id', p.id);
+      const { error } = await sb.from('purchases').delete().eq('id', p.id);
+      if (error) throw error;
+      location.hash = '#finance'; await refresh('Purchase deleted');
+    }, 'Delete purchase', true) }, 'Delete this purchase'));
+  };
+
+  function purchaseForm(p) {
+    const isNew = !p;
+    const cats = D.cats.filter((c) => c.grp !== 'Upah').map((c) => c.name);
+    const all = p && !cats.includes(p.category) ? [p.category, ...cats] : cats;
+    const partners = D.members.filter((m) => m.active).map((m) => m.display_name);
+    const payers = ['From the pool', ...partners];
+    if (p && p.paid_by && !payers.includes(p.paid_by)) payers.push(p.paid_by);
+    openSheet(isNew ? 'Record a purchase or payment' : `Edit ${p.ref}`, [
+      { key: 'category', label: 'Category', type: 'select', value: p?.category || 'Beli Baja', options: all.map((c) => [c, c]) },
+      { key: 'other_note', label: 'Specify', required: true, value: p?.other_note, ph: 'e.g. Bayar bil air', showIf: (v) => v.category === 'Lain-lain' },
+      { key: 'item', label: 'Item', value: p?.item, ph: 'e.g. 20 bags Vintage 15-15-15' },
+      { key: 'supplier', label: 'From (supplier or person)', value: p?.supplier, list: [...new Set(D.purchases.map((x) => x.supplier).filter(Boolean))] },
+      { key: 'amount', label: 'Amount (RM)', type: 'number', mode: 'decimal', value: p?.amount, ph: '0.00', half: true, note: isNew ? null : (p.amount == null ? 'From the planter\'s records.' : null) },
+      { key: 'purchased_on', label: 'Date', type: 'date', value: p?.purchased_on || (isNew ? today() : ''), half: true },
+      { key: 'paid_by', label: 'Paid by', type: 'select', value: p?.paid_by || 'From the pool', options: payers.map((x) => [x, x === 'From the pool' ? 'From the pool (plantation account)' : x]) },
+      { key: 'for', label: 'For peringkat (optional)', type: 'chips', value: p ? D.batches.filter((b) => (p.for_batches || '').split(/[,+\s]+/).includes('P' + b.no)).map((b) => b.id) : [], options: [...D.batches].sort((x, y) => x.no - y.no).map((b) => [b.id, 'P' + b.no]) }
+    ], async (v) => {
+      const chosen = [...D.batches].sort((x, y) => x.no - y.no).filter((b) => (v.for || []).includes(b.id)).map((b) => 'P' + b.no);
+      const keepNote = p && p.for_batches && !chosen.length ? p.for_batches : null;
+      const extra = p && p.for_batches && /sulam/i.test(p.for_batches) && chosen.length ? ' + sulam' : '';
+      const row = { category: v.category, other_note: v.category === 'Lain-lain' ? v.other_note : (p?.other_note ?? null), item: v.item, supplier: v.supplier,
+        amount: v.amount == null ? null : Math.round(v.amount * 100) / 100, purchased_on: v.purchased_on, paid_by: v.paid_by,
+        for_batches: chosen.length ? chosen.join(', ') + extra : keepNote };
+      if (v.paid_by !== 'From the pool' && isNew) row.other_note = [row.other_note, `Paid by ${v.paid_by}; claim it in Expense if needed.`].filter(Boolean).join(' ');
+      let ref = p?.ref;
+      if (isNew) {
+        let tries = 0, res;
+        do {
+          ref = nextRef('PB-', D.purchases.concat(tries ? [{ ref }] : []));
+          res = await sb.from('purchases').insert({ ...row, plantation_id: D.plantation.id, ref, created_by: D.me.id }).select('id').single();
+          tries++;
+        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
+        if (res.error) throw res.error;
+      } else {
+        const { error } = await sb.from('purchases').update(row).eq('id', p.id);
+        if (error) throw error;
+      }
+      await refresh(isNew ? `${ref} saved` : 'Saved');
+      if (isNew) location.hash = '#buy-' + ref;
+    }, isNew ? 'Save purchase' : 'Save changes');
+  }
+
+  // ================= URGENT ALERTS (Stage 5) =================
+  const AL_TYPES = ['Theft or trespass', 'Animal damage (wild boar, monkeys)', 'Fire', 'Flood or drainage', 'Pest or disease outbreak', 'Injury or accident', 'Contractor problem', 'Other'];
+  const alKind = (st) => ({ Open: 'red', 'Action taken': 'gold', Closed: 'green' })[st];
+  const ago = (ts) => { const d = new Date(ts); const mins = Math.round((Date.now() - d) / 60000); if (mins < 60) return mins <= 1 ? 'just now' : mins + ' min ago'; if (mins < 1440) return Math.round(mins / 60) + ' h ago'; return dstr(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); };
+  const alActions = (a) => D.aa.filter((x) => x.alert_id === a.id).sort((x, y) => String(x.created_at).localeCompare(String(y.created_at)));
+
+  function alertPanel() {
+    const open = D.alerts.filter((a) => a.status !== 'Closed');
+    const wrap = h('div', { class: 'view-part' });
+    if (open.length) {
+      wrap.append(h('div', { class: 'alert-red' },
+        h('div', { class: 'h ah' }, svg('<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>'), `${open.length} urgent issue${open.length > 1 ? 's' : ''} open`),
+        open.map((a) => { const last = alActions(a).at(-1); return h('a', { class: 'alert-item', href: '#alert-' + a.ref },
+          h('span', { class: 'ai-top' }, h('b', {}, `${a.ref} · ${a.type}`), h('span', { class: 'pill ' + alKind(a.status) }, a.status)),
+          h('small', {}, `${a.location || 'Whole plantation'} · ${a.urgency} · reported by ${memberName(a.reported_by)}, ${ago(a.reported_at)}`),
+          h('small', {}, last ? 'Latest: ' + last.action : a.description || '')); })));
+    } else {
+      wrap.append(h('div', { class: 'alert-ok' }, svg('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'), h('div', {}, h('div', { class: 'h' }, 'No alert'), h('small', {}, 'All clear on the plantation'))));
+    }
+    wrap.append(h('div', { class: 'alert-btns' },
+      h('button', { class: 'btn alert-btn', type: 'button', onclick: alertForm }, svg('<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>'), 'Report urgent issue'),
+      h('a', { class: 'btn ghost', href: '#alerts' }, `All alerts (${D.alerts.length})`)));
+    return wrap;
+  }
+
+  function alertForm() {
+    const places = ['Whole plantation', ...D.blocks.map((b) => b.name), ...[...D.batches].sort((x, y) => x.no - y.no).map((b) => b.name), 'Fence / boundary', 'Pond (kolam)', 'Road / access'];
+    openSheet('Report urgent issue', [
+      { type: 'note', label: 'Partners see it at the top of Home as soon as they open the app. (Phone notifications come in a later stage, so also tell them by WhatsApp if it can\'t wait.)' },
+      { key: 'type', label: 'What kind of issue', type: 'select', value: AL_TYPES[0], options: AL_TYPES.map((t) => [t, t]) },
+      { key: 'location', label: 'Where', type: 'select', value: 'Whole plantation', options: places.map((p) => [p, p]), half: true },
+      { key: 'urgency', label: 'How urgent', type: 'select', value: 'High', options: [['High', 'High: act today'], ['Critical', 'Critical: act now']], half: true },
+      { key: 'description', label: 'What happened', type: 'textarea', required: true, ph: 'e.g. Fence broken on east side, about 40 plants uprooted' },
+      { type: 'note', label: 'After sending, add photos on the alert page.' }
+    ], async (v) => {
+      let ref, tries = 0, res;
+      do {
+        ref = nextRef('AL-', D.alerts.concat(tries ? [{ ref }] : []));
+        res = await sb.from('alerts').insert({ plantation_id: D.plantation.id, ref, type: v.type, location: v.location, urgency: v.urgency, description: v.description, status: 'Open', reported_by: D.me.id, reported_at: new Date().toISOString() }).select('id').single();
+        tries++;
+      } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
+      if (res.error) throw res.error;
+      await refresh('Alert sent');
+      location.hash = '#alert-' + ref;
+    }, 'Send alert', true);
+  }
+
+  PAGES.alerts = (root) => {
+    setHead('All alerts', 'Urgent issues, open and closed', ['Home', '#']);
+    root.append(h('button', { class: 'btn alert-btn', type: 'button', onclick: alertForm }, svg('<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>'), 'Report urgent issue'));
+    const list = [...D.alerts].sort((a, b) => (a.status === 'Closed') - (b.status === 'Closed') || String(b.reported_at).localeCompare(String(a.reported_at)));
+    root.append(card(list.length ? list.map((a) => linkRow('#alert-' + a.ref, `${a.ref} · ${a.type}`, `${a.location || 'Whole plantation'} · ${a.urgency} · ${ago(a.reported_at)}`, pill(a.status, alKind(a.status)))) : h('p', { class: 'muted' }, 'No alerts yet. Good.')));
+  };
+
+  PAGES.alert = (root, ref) => {
+    const a = D.alerts.find((x) => x.ref === ref);
+    if (!a) { location.hash = '#alerts'; return; }
+    const closed = a.status === 'Closed';
+    setHead(`${a.ref} · ${a.type}`, `${a.status} · ${a.urgency}`, ['All alerts', '#alerts']);
+    root.append(h('div', { class: 'card kvs' },
+      kv('Where', a.location || 'Whole plantation'), kv('How urgent', a.urgency === 'Critical' ? 'Critical: act now' : 'High: act today'),
+      kv('Reported by', `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, true),
+      closed ? kv('Closed', `${memberName(a.closed_by)}, ${ago(a.closed_at)}`, true) : null,
+      kv('What happened', a.description, true)));
+    root.append(sec('Actions taken'));
+    const acts = alActions(a);
+    root.append(card(acts.length ? acts.map((x) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, x.action), h('small', {}, `${memberName(x.member_id)} · ${ago(x.created_at)}`)))) : h('p', { class: 'muted' }, 'No actions yet.')));
+    const save = async (text, close) => {
+      const { error } = await sb.from('alert_actions').insert({ alert_id: a.id, plantation_id: D.plantation.id, member_id: D.me.id, action: text });
+      if (error) throw error;
+      const upd = close ? { status: 'Closed', closed_at: new Date().toISOString(), closed_by: D.me.id } : { status: 'Action taken' };
+      const r = await sb.from('alerts').update(upd).eq('id', a.id);
+      if (r.error) throw r.error;
+      await refresh(close ? 'Alert closed' : 'Action added');
+    };
+    if (!closed) {
+      root.append(h('div', { class: 'alert-btns' },
+        h('button', { class: 'btn primary', type: 'button', onclick: () => openSheet('Add an action', [{ key: 'action', label: 'What was done', type: 'textarea', required: true, ph: 'e.g. Fence repaired by Rosli Jentera, RM 350' }], (v) => save(v.action, false), 'Add action') }, 'Add action'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => openSheet(`Close ${a.ref}`, [{ key: 'action', label: 'Closing note', type: 'textarea', required: true, ph: 'e.g. All fixed; checked on site' }], (v) => save(v.action, true), 'Close alert') }, 'Close alert')));
+    } else if (D.isAdmin) {
+      root.append(h('button', { class: 'btn link', type: 'button', onclick: async () => { const { error } = await sb.from('alerts').update({ status: 'Action taken', closed_at: null, closed_by: null }).eq('id', a.id); if (error) return toast(friendly(error)); await refresh('Alert reopened'); } }, 'Reopen this alert'));
+    }
+    root.append(attachBox('alert', a.id, 'Photos'));
+  };
+
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
-  PAGES.finance = later('Finance', 'Stage 5', 'Capital pool, purchases, where the money went, and profit shares.');
   PAGES.map = later('Map', 'Later stage', 'The plantation sketch with blok, peringkat and marks for issues, fences and water.');
   PAGES.reports = later('Reports', 'Stage 6', 'Excel and PDF reports saved for all partners, kept for 12 months.');
 
