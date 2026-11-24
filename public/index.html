@@ -35,7 +35,7 @@
   <section id="v-email" class="view" hidden>
     <form id="f-email" class="card form" novalidate>
       <h2 class="h">Sign in with your email</h2>
-      <p class="muted">We'll email you a 6-digit code. No password needed.</p>
+      <p class="muted">We'll email you a sign-in code. No password needed.</p>
       <label for="email">Email</label>
       <input id="email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" required placeholder="you@example.com">
       <p class="err" id="email-err" role="alert" hidden></p>
@@ -46,9 +46,9 @@
   <section id="v-code" class="view" hidden>
     <form id="f-code" class="card form" novalidate>
       <h2 class="h">Enter the code</h2>
-      <p class="muted">We sent a 6-digit code to <strong id="code-to"></strong>. It can take a minute to arrive; check spam too.</p>
-      <label for="code">6-digit code</label>
-      <input id="code" name="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required placeholder="000000">
+      <p class="muted">We sent a code to <strong id="code-to"></strong>. It can take a minute to arrive; check spam too.</p>
+      <label for="code">Code from the email</label>
+      <input id="code" name="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required placeholder="00000000">
       <p class="err" id="code-err" role="alert" hidden></p>
       <button class="btn primary" type="submit" id="code-btn">Sign in</button>
       <div class="row">

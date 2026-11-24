@@ -7,6 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const views = ['loading', 'email', 'code', 'nomember', 'home'];
   const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
+  const CODE_LEN = LK_CONFIG.codeLength || 8;
   let pendingEmail = '';
   let resendAt = 0;
 
@@ -52,15 +53,15 @@
 
   // ---------- sign in: step 2, code ----------
   $('code').addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
-    if (e.target.value.length === 6) $('f-code').requestSubmit();
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, CODE_LEN);
+    if (e.target.value.length === CODE_LEN) $('f-code').requestSubmit();
   });
 
   $('f-code').addEventListener('submit', async (e) => {
     e.preventDefault();
     hideErr('code-err');
     const token = $('code').value.trim();
-    if (!/^\d{6}$/.test(token)) return showErr('code-err', 'The code has 6 digits.');
+    if (token.length !== CODE_LEN) return showErr('code-err', `The code has ${CODE_LEN} digits.`);
     const btn = $('code-btn');
     busy(btn, true, 'Checking…');
     const { error } = await sb.auth.verifyOtp({ email: pendingEmail, token, type: 'email' });
