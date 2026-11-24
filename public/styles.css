@@ -49,5 +49,5 @@ input.code{font-family:'Space Grotesk',monospace;font-size:28px;letter-spacing:6
 .blk{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #EEECE4}
 .blk:first-child{border-top:0}
 .blk .n{font-weight:600}.blk .s{font-size:13px;color:var(--muted)}
-.blk .p{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.blk .p{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;flex:none;text-align:right}
 .note{background:#FFF8E6;border-color:#F0DDAA}.note p{margin:0}
