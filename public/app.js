@@ -159,7 +159,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -189,9 +189,10 @@
       q('claim_expenses'),
       q('purchases'),
       q('alert_actions'),
-      q('reports').order('created_at', { ascending: false })
+      q('reports').order('created_at', { ascending: false }),
+      q('crop_templates')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -201,7 +202,7 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data,
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data, templates: templates.data,
       savedAt: new Date().toISOString()
     };
   }
@@ -366,8 +367,8 @@
     closeSheet();
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
-    const page = PAGES[name] || PAGES.home;
-    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
+    const page = PAGES[name] || (!name && wide() ? PAGES.dashboard : PAGES.home);
+    const tab = (name === 'dashboard' || (!name && wide())) ? 'dashboard' : !name ? 'home' : TABS[name] || { home: 'home', p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -732,6 +733,12 @@
       kv('Landowner', p.landowner), kv('Rent', p.rent_amount != null ? `${rm(p.rent_amount)}${p.rent_period ? ' / ' + p.rent_period.toLowerCase() : ''}` : ''),
       kv('Lease ends', dstr(p.lease_ends_on)), kv('Phone', p.phone), kv('Email', p.email, true)));
     if (!D.isAdmin) root.append(h('p', { class: 'muted small foot' }, 'Only the admin partner can change the plantation profile.'));
+    root.append(sec('Crop calendar'));
+    root.append(card((D.templates || []).length ? [...D.templates].sort((a, b) => a.variety.localeCompare(b.variety)).map((t) => h('div', { class: 'trow' },
+      h('span', { class: 'lmain' }, h('b', {}, t.variety), h('small', {}, `Flowering (hormon) ${t.months_to_induction ?? '—'} months after planting · harvest ${t.months_induction_to_harvest ?? '—'} months after that`)),
+      h('button', { class: 'btn small-btn', type: 'button', onclick: () => cropForm(t) }, 'Edit'))) : h('p', { class: 'muted' }, 'No varieties yet.'),
+      h('button', { class: 'btn link', type: 'button', onclick: () => cropForm(null) }, '+ Add a variety')));
+    root.append(h('p', { class: 'muted small foot' }, 'Used for the harvest outlook on the Dashboard. Set the months your planter or agency advises for each variety.'));
     root.append(sec('This phone'));
     root.append(pushCard(false));
     root.append(sec('Me'));
@@ -1952,6 +1959,183 @@
     };
     draw();
     return box;
+  }
+
+  // ================= PARTNERS' DASHBOARD (Stage 7c) =================
+  const wide = () => matchMedia('(min-width: 1000px)').matches;
+  const forBatches = (txt) => D.batches.filter((b) => String(txt || '').split(/[,+\s]+/).includes('P' + b.no));
+  // split an amount across peringkat by their plant counts
+  function spread(acc, batches, amount, field) {
+    if (!amount) return false;
+    const tot = batches.reduce((s, b) => s + b.plants, 0);
+    if (!batches.length || !tot) return false;
+    for (const b of batches) acc[b.id][field] += amount * b.plants / tot;
+    return true;
+  }
+  function perBatch() {
+    const acc = Object.fromEntries(D.batches.map((b) => [b.id, { spent: 0, sales: 0, fruit: 0 }]));
+    let shared = 0;
+    for (const j of D.jobs) { const c = jobCost(j); if (c && !spread(acc, jobBatches(j), c, 'spent')) shared += c; }
+    for (const p of D.purchases) { const c = Number(p.amount || 0); if (c && !spread(acc, forBatches(p.for_batches), c, 'spent')) shared += c; }
+    for (const e of D.expenses) shared += Number(e.amount || 0);
+    for (const k of D.picks) { const bs = pickBatches(k); if (!spread(acc, bs, pickAmt(k), 'sales')) shared -= 0; spread(acc, bs, pickFruit(k), 'fruit'); }
+    return { acc, shared };
+  }
+  function outlook() {
+    // expected flowering and harvest from each variety's crop calendar (Settings); actual hormon jobs override the induction date
+    const addM = (d, m) => { if (!d || m == null) return null; const x = new Date(d); x.setMonth(x.getMonth() + Math.round(Number(m))); return x; };
+    return [...D.batches].sort((x, y) => x.no - y.no).map((b) => {
+      const t = (D.templates || []).find((x) => x.variety === b.variety);
+      const horm = jobBatches ? D.jobs.filter((j) => /hormon/i.test(j.category) && DONE.includes(j.status) && j.start_on && D.jb.some((x) => x.job_id === j.id && x.batch_id === b.id)).sort((x, y) => x.start_on.localeCompare(y.start_on))[0] : null;
+      const induce = horm ? new Date(horm.start_on) : t ? addM(b.planted_on, t.months_to_induction) : null;
+      const harvest = induce && t ? addM(induce, t.months_induction_to_harvest) : null;
+      return { b, t, horm, induce, harvest };
+    });
+  }
+  const monthStr = (d) => (d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : '');
+
+  PAGES.dashboard = (root) => {
+    setHead(D.plantation.name, `Partners' dashboard · updated ${D.savedAt ? ago(D.savedAt) : 'now'}`);
+    const M = money();
+    const owedToUs = D.picks.filter((k) => !pickRc(k)).reduce((s, k) => s + pickAmt(k), 0);
+    root.append(h('div', { class: 'dash-actions' },
+      h('button', { class: 'btn gold', type: 'button', onclick: () => exportSheet(fullReport, 'Full report') }, 'Download full report (Excel / PDF)'),
+      D.isAdmin ? h('button', { class: 'btn ghost', type: 'button', onclick: topUpForm }, 'Add capital top-up') : null));
+    root.append(alertPanel());
+    const tile = (l, v, s, href, tone) => h('a', { class: 'kpi' + (tone ? ' ' + tone : ''), href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), s ? h('div', { class: 's' }, s) : null);
+    root.append(h('div', { class: 'kpis dash-kpis' },
+      tile('Capital pooled', M.pool ? rm(M.pool) : 'Not entered', `${D.members.filter((m) => m.active).length} partner(s)`, '#finance'),
+      tile('Spent so far', rm(M.spent), M.unpriced ? `${M.unpriced} item(s) still need a price` : 'All costs priced', '#finance'),
+      tile('Sales so far', rm(M.sales), owedToUs ? `Buyers owe ${rm(owedToUs)}` : 'Nothing owed to us', '#sales'),
+      tile(M.profit < 0 ? 'Loss so far' : 'Profit so far', rm(Math.abs(M.profit)), M.profit < 0 ? 'Normal before the first harvest' : 'Sales minus all costs', '#finance', M.profit < 0 ? 'neg' : 'pos'),
+      tile('Cash left in the pool', M.pool ? 'about ' + rm(M.cash) : '—', M.owedOut ? `Still to pay out ${rm(M.owedOut)}` : 'Nothing waiting to be paid', '#finance'),
+      tile('Plants', fmt(D.batches.reduce((s, b) => s + b.plants, 0)), `${D.batches.length} peringkat · ${D.blocks.length} blok`, '#status')));
+
+    const grid = h('div', { class: 'dash-grid' });
+    root.append(grid);
+    const col1 = h('div', { class: 'dash-col' }), col2 = h('div', { class: 'dash-col' });
+    grid.append(col1, col2);
+
+    // Peringkat: cost, sales and profit
+    const { acc, shared } = perBatch();
+    const rows = [...D.batches].sort((x, y) => x.no - y.no).map((b) => { const a = acc[b.id]; const area = b.measured_acres ?? b.est_acres; return { b, a, area, profit: a.sales - a.spent }; });
+    const totSpent = rows.reduce((s, r) => s + r.a.spent, 0) + shared;
+    const totSales = rows.reduce((s, r) => s + r.a.sales, 0);
+    const pSpec = () => ({ title: 'Peringkat: cost, sales and profit', sheet: 'Peringkat money', sub: 'Costs and sales that cover several peringkat are split by plant count. Partner expenses and items not linked to a peringkat are shown as shared costs.',
+      cols: [{ h: 'Peringkat', t: 'text', w: 14 }, { h: 'Blok', t: 'text', w: 14 }, { h: 'Variety', t: 'text', w: 12 }, { h: 'Plants', t: 'int' }, { h: 'Acres', t: 'money' }, { h: 'Spent (RM)', t: 'money' }, { h: 'Sales (RM)', t: 'money' }, { h: 'Profit (RM)', t: 'money' }, { h: 'Cost per plant (RM)', t: 'money', w: 16 }],
+      rows: [...rows.map((r) => [r.b.name, batchInfo(r.b).blockNames.join(' + '), r.b.variety || '', r.b.plants, r.area != null ? Number(r.area) : null, r.a.spent, r.a.sales, r.profit, r.b.plants ? r.a.spent / r.b.plants : null]), ['Shared costs', 'not charged to a peringkat', '', null, null, shared, 0, -shared, null]],
+      foot: ['Total', '', '', D.batches.reduce((s, b) => s + b.plants, 0), rows.reduce((s, r) => s + Number(r.area || 0), 0), totSpent, totSales, totSales - totSpent, null] });
+    col1.append(sec('Peringkat: cost, sales and profit', xpBtn(pSpec, 'Peringkat money')));
+    col1.append(h('div', { class: 'card table scroll' }, h('table', { class: 'dtable' },
+      h('thead', {}, h('tr', {}, ['Peringkat', 'Variety', 'Plants', 'Acres', 'Spent', 'Sales', 'Profit', 'RM / plant'].map((x, i) => h('th', { class: i > 1 ? 'num' : '' }, x)))),
+      h('tbody', {}, rows.map((r) => h('tr', {}, h('td', {}, h('a', { href: '#p-' + r.b.no }, h('span', { class: 'long' }, r.b.name), h('span', { class: 'short' }, 'P' + r.b.no)), h('small', {}, batchInfo(r.b).blockNames.join(' + '))), h('td', {}, r.b.variety || '—'),
+        h('td', { class: 'num' }, fmt(r.b.plants)), h('td', { class: 'num' }, r.area != null ? Number(r.area).toFixed(2) : '—'), h('td', { class: 'num' }, money2(r.a.spent)), h('td', { class: 'num' }, money2(r.a.sales)),
+        h('td', { class: 'num ' + (r.profit < 0 ? 'red-t' : 'green-t') }, (r.profit < 0 ? '−' : '') + money2(Math.abs(r.profit))), h('td', { class: 'num' }, r.b.plants ? (r.a.spent / r.b.plants).toFixed(3) : '—'))),
+        h('tr', { class: 'shared' }, h('td', {}, 'Shared costs', h('small', {}, 'Partner expenses and items not linked to a peringkat')), h('td', {}), h('td', {}), h('td', {}), h('td', { class: 'num' }, money2(shared)), h('td', { class: 'num' }, '0.00'), h('td', { class: 'num red-t' }, shared ? '−' + money2(shared) : '0.00'), h('td', {}))),
+      h('tfoot', {}, h('tr', {}, h('td', {}, 'Total'), h('td', {}), h('td', { class: 'num' }, fmt(D.batches.reduce((s, b) => s + b.plants, 0))), h('td', { class: 'num' }, rows.reduce((s, r) => s + Number(r.area || 0), 0).toFixed(2)),
+        h('td', { class: 'num' }, money2(totSpent)), h('td', { class: 'num' }, money2(totSales)), h('td', { class: 'num ' + (totSales - totSpent < 0 ? 'red-t' : 'green-t') }, (totSales - totSpent < 0 ? '−' : '') + money2(Math.abs(totSales - totSpent))), h('td', {}))))));
+
+    // Harvest outlook
+    const ol = outlook();
+    const known = ol.filter((o) => o.harvest || o.induce);
+    col1.append(sec('Harvest outlook'));
+    if (!known.length) col1.append(h('div', { class: 'card note' }, h('p', {}, 'Set the variety on each peringkat (Status → tap a peringkat → Edit) to see when each is expected to flower and fruit. The months come from the crop calendar for each variety. Each plant gives one fruit in its first crop.')));
+    else {
+      const byMonth = {};
+      for (const o of known) if (o.harvest) { const k = o.harvest.getFullYear() * 12 + o.harvest.getMonth(); (byMonth[k] = byMonth[k] || { d: o.harvest, list: [] }).list.push(o); }
+      const nowM = new Date().getFullYear() * 12 + new Date().getMonth();
+      col1.append(card(Object.values(byMonth).sort((a, b) => a.d - b.d).map((g) => h('div', { class: 'trow' }, h('span', { class: 'fc-m h' }, monthStr(g.d), g.d.getFullYear() * 12 + g.d.getMonth() <= nowM ? h('small', { class: 'due' }, 'due now') : null), h('span', { class: 'lmain' }, h('b', {}, g.list.map((o) => 'P' + o.b.no).join(', ')), h('small', {}, g.list.map((o) => `${o.b.variety}${o.horm ? ', hormon ' + dstr(o.horm.start_on) : ''}`).join(' · '))), h('span', { class: 'lright' }, `up to ${fmt(g.list.reduce((s, o) => s + o.b.plants, 0))} fruit`))),
+        ol.filter((o) => !o.harvest).length ? h('p', { class: 'muted small' }, `No outlook yet for ${ol.filter((o) => !o.harvest).map((o) => 'P' + o.b.no).join(', ')}: set their variety.`) : null));
+      col1.append(h('p', { class: 'muted small foot' }, 'An estimate from each variety\'s crop calendar (☰ Settings → Crop calendar); a hormon job that is done replaces the expected flowering date. "Up to" = one fruit per plant.'));
+    }
+
+    // Needs attention
+    const need = [];
+    const noPrice = D.jobs.filter((j) => DONE.includes(j.status) && j.price == null).length;
+    const noContr = D.jobs.filter((j) => DONE.includes(j.status) && !j.contractor_id).length;
+    const noPurchase = D.purchases.filter((p) => p.amount == null).length;
+    const toPay = D.jobs.filter((j) => j.status === 'To pay');
+    const claimsUnpaid = D.claims.filter((c) => c.status === 'Claimed');
+    const openAl = D.alerts.filter((a) => a.status !== 'Closed');
+    const noCap = D.members.filter((m) => m.active && !Number(m.capital));
+    if (openAl.length) need.push(['Urgent alerts open', openAl.map((a) => `${a.ref} ${a.type}`).join(' · '), '', '#alerts']);
+    if (toPay.length) need.push(['Contractors to pay', `${toPay.length} job(s) done`, rm(toPay.reduce((s, j) => s + Number(j.price || 0), 0)), '#jobs']);
+    if (claimsUnpaid.length) need.push(['Partner claims unpaid', claimsUnpaid.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '), rm(claimsUnpaid.reduce((s, c) => s + Number(c.amount || 0), 0)), '#exp']);
+    if (owedToUs) need.push(['Buyers owe us', `${D.picks.filter((k) => !pickRc(k)).length} pick(s) not paid yet`, rm(owedToUs), '#sales']);
+    if (noPrice || noContr) need.push(['Jobs missing details', `${noPrice} without a price · ${noContr} without a contractor`, '', '#jobs-none']);
+    if (noPurchase) need.push(['Purchases without a price', `${noPurchase} from the planter's records`, '', '#finance']);
+    if (noCap.length) need.push(['Capital not entered', noCap.map((m) => m.display_name).join(', '), '', '#partners']);
+    if (outbox.length) need.push(['Changes not synced on this device', `${outbox.length} waiting`, '', '#']);
+    col2.append(sec('Needs attention'));
+    col2.append(card(need.length ? need.map((n) => h('a', { class: 'trow', href: n[3] }, h('span', { class: 'dot gold' }), h('span', { class: 'lmain' }, h('b', {}, n[0]), h('small', {}, n[1])), n[2] ? h('span', { class: 'lright' }, n[2]) : null, h('span', { class: 'chev' }, '›'))) : h('p', { class: 'muted' }, 'Nothing needs attention. All clear.')));
+
+    // Partner statement
+    const act = D.members.filter((m) => m.active);
+    const stBox = h('div', { class: 'card' });
+    const drawSt = (m) => {
+      const share = M.pool ? Number(m.capital || 0) / M.pool : 0;
+      const es = D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool);
+      const sum = (f) => es.filter(f).reduce((s, e) => s + Number(e.amount), 0);
+      const rowsSt = [['Capital paid in', rm(m.capital)], ['Share of the plantation', M.pool ? (share * 100).toFixed(1) + '%' : '—'],
+        [M.profit < 0 ? 'Share of loss so far' : 'Share of profit so far', M.pool ? rm(Math.abs(M.profit) * share) : '—'],
+        ['Own-pocket spending not claimed', rm(sum((e) => !exClaim(e)))], ['Claimed, waiting to be paid', rm(sum((e) => exClaim(e)?.status === 'Claimed'))], ['Claims paid back', rm(sum((e) => exClaim(e)?.status === 'Paid'))]];
+      stBox.replaceChildren(
+        h('div', { class: 'seg' }, act.map((x) => h('button', { type: 'button', class: x.id === m.id ? 'on' : '', onclick: () => drawSt(x) }, x.display_name))),
+        ...rowsSt.map((r) => h('div', { class: 'st-row' }, h('span', {}, r[0]), h('b', {}, r[1]))),
+        h('p', { class: 'muted small' }, 'Profit is shared by capital paid in, after all costs. No payouts until the pool is paid back or the partners agree to one.'));
+      stBox.dataset.member = m.id;
+    };
+    const stSpec = () => { const m = D.members.find((x) => x.id === stBox.dataset.member) || D.me; const share = M.pool ? Number(m.capital || 0) / M.pool : 0; const es = D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool);
+      const sum = (f) => es.filter(f).reduce((s, e) => s + Number(e.amount), 0);
+      return { title: `Partner statement · ${m.display_name}`, sheet: 'Partner statement', sub: `Plantation capital ${rm(M.pool)} · costs ${rm(M.spent)} · sales ${rm(M.sales)} · ${M.profit < 0 ? 'loss' : 'profit'} ${rm(Math.abs(M.profit))}`,
+        cols: [{ h: 'Item', t: 'text', w: 34 }, { h: 'RM / %', t: 'money', w: 16 }],
+        rows: [['Capital paid in (RM)', Number(m.capital || 0)], ['Share of the plantation (%)', share * 100], [M.profit < 0 ? 'Share of loss so far (RM)' : 'Share of profit so far (RM)', Math.abs(M.profit) * share], ['Own-pocket spending not claimed (RM)', sum((e) => !exClaim(e))], ['Claimed, waiting to be paid (RM)', sum((e) => exClaim(e)?.status === 'Claimed')], ['Claims paid back (RM)', sum((e) => exClaim(e)?.status === 'Paid')]] }; };
+    col2.append(sec('Partner statement', xpBtn(stSpec, 'Partner statement')));
+    drawSt(act.find((x) => x.id === D.me.id) || act[0] || D.me);
+    col2.append(stBox);
+
+    // Recent activity
+    const ev = [];
+    const by = (id) => (id ? memberName(id) : null);
+    for (const j of D.jobs) if (j.created_by) ev.push([j.created_at, by(j.created_by), `recorded job ${j.ref} · ${jobName(j)}`, '#job-' + j.ref]);
+    for (const p of D.pays) ev.push([p.created_at, by(p.created_by), `paid ${p.contractor_name} ${rm(p.amount)} (${p.ref})`, '#pay-' + p.ref]);
+    for (const k of D.picks) if (k.created_by) ev.push([k.created_at, by(k.created_by), `recorded harvest ${k.ref} · ${fmt(pickFruit(k))} fruit`, '#pick-' + k.ref]);
+    for (const r of D.rcs) ev.push([r.created_at, by(r.created_by), `received ${rm(r.amount)} from ${r.buyer_name} (${r.ref})`, '#rc-' + r.ref]);
+    for (const e of D.expenses) ev.push([e.created_at, e.paid_from_pool ? null : by(e.member_id), `${e.paid_from_pool ? 'pool paid' : 'spent'} ${rm(e.amount)} · ${e.what || e.type}`, '#ex-' + e.ref]);
+    for (const p of D.purchases) if (p.created_by) ev.push([p.created_at, by(p.created_by), `recorded purchase ${p.ref} · ${p.category}`, '#buy-' + p.ref]);
+    for (const a of D.alerts) ev.push([a.reported_at, by(a.reported_by), `reported ${a.ref} · ${a.type}`, '#alert-' + a.ref]);
+    for (const x of D.aa) ev.push([x.created_at, by(x.member_id), `action on alert: ${x.action}`, '#alert-' + (D.alerts.find((a) => a.id === x.alert_id)?.ref || '')]);
+    const recent = ev.filter((e) => e[0]).sort((a, b) => String(b[0]).localeCompare(String(a[0]))).slice(0, 12);
+    col2.append(sec('Recent activity'));
+    col2.append(card(recent.length ? recent.map((e) => h('a', { class: 'trow act', href: e[3] }, h('span', { class: 'lmain' }, h('b', {}, `${e[1] || 'Someone'} ${e[2]}`), h('small', {}, ago(e[0]))))) : h('p', { class: 'muted' }, 'Nothing recorded in the app yet. New jobs, harvests, payments, expenses and alerts will show here.')));
+  };
+
+  function topUpForm() {
+    const act = D.members.filter((m) => m.active);
+    openSheet('Add capital top-up', [
+      { key: 'member', label: 'Partner', type: 'select', value: D.me.id, options: act.map((m) => [m.id, `${m.display_name} (now ${rm(m.capital)})`]) },
+      { key: 'amount', label: 'Top-up amount (RM)', type: 'number', mode: 'decimal', required: true, ph: '0.00' },
+      { type: 'note', label: 'This adds to the partner\'s capital paid in, so everyone\'s share is recalculated. Keep the bank slip as a receipt.' }
+    ], async (v) => {
+      if (!(v.amount > 0)) throw new Error('The amount must be more than RM 0.');
+      const m = act.find((x) => x.id === v.member);
+      const { error } = await sb.from('members').update({ capital: Math.round((Number(m.capital || 0) + v.amount) * 100) / 100 }).eq('id', m.id);
+      if (error) throw error;
+      await refresh(`Capital for ${m.display_name} is now ${rm(Number(m.capital || 0) + v.amount)}`);
+    }, 'Add top-up');
+  }
+
+  function cropForm(t) {
+    openSheet(t ? `Crop calendar · ${t.variety}` : 'Add a variety', [
+      { key: 'variety', label: 'Variety', required: true, value: t?.variety, ph: 'e.g. MD2' },
+      { key: 'months_to_induction', label: 'Months from planting to flowering (hormon)', type: 'number', mode: 'decimal', value: t?.months_to_induction, half: true },
+      { key: 'months_induction_to_harvest', label: 'Months from hormon to harvest', type: 'number', mode: 'decimal', value: t?.months_induction_to_harvest, half: true }
+    ], async (v) => {
+      const row = { variety: v.variety, months_to_induction: v.months_to_induction, months_induction_to_harvest: v.months_induction_to_harvest };
+      const { error } = t ? await sb.from('crop_templates').update(row).eq('id', t.id) : await sb.from('crop_templates').insert({ ...row, plantation_id: D.plantation.id });
+      if (error) throw error;
+      await refresh('Crop calendar saved');
+    });
   }
 
   // ---------- pages still to build ----------
