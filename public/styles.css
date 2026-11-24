@@ -257,3 +257,14 @@ a.alert-item{text-decoration:none;gap:3px}
 .ai-top b{color:#7A1A10}
 .pill.red{background:#FDE7DC;color:var(--red);border-color:#F5B9A5}
 @media (max-width:380px){.alert-btns{grid-template-columns:1fr}}
+
+/* ---------- Stage 6: reports ---------- */
+.btn.xp{gap:6px;font-size:13px;min-height:38px;padding:6px 10px;flex:none}
+.btn.xp svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:500;color:var(--ink2);margin:4px 0}
+.check input{width:22px;height:22px;min-height:0;margin:0;flex:none;accent-color:var(--green)}
+.rep-row{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line2)}
+.rep-row:last-child{border-bottom:0}
+.rep-row .lrow{flex:1;border-bottom:0}
+.doc-ico{width:40px;height:40px;border-radius:8px;background:var(--green-l);color:var(--green);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:12px;flex:none}
+.thumb-x.rel{position:static;flex:none}

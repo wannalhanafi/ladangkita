@@ -148,7 +148,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -177,9 +177,10 @@
       q('claims').order('ref'),
       q('claim_expenses'),
       q('purchases'),
-      q('alert_actions')
+      q('alert_actions'),
+      q('reports').order('created_at', { ascending: false })
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -189,7 +190,7 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data
     };
   }
 
@@ -347,7 +348,7 @@
     if (waitingClaims.length) root.append(h('a', { class: 'banner amber-b', href: '#cl-' + waitingClaims[0].ref }, h('span', {}, h('b', {}, `${waitingClaims.length} partner claim${waitingClaims.length > 1 ? 's' : ''} to pay · ${rm(waitingClaims.reduce((s, c) => s + Number(c.amount), 0))}`), h('small', {}, waitingClaims.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '))), h('span', { class: 'chev' }, '›')));
     root.append(h('div', { class: 'quick' }, h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs'), h('a', { class: 'btn gold', href: '#sales' }, 'Sales'), h('a', { class: 'btn gold', href: '#exp' }, 'Expense')));
     if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
-    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Reports (Excel and PDF), Map and offline recording are coming next. Everything you see here is your real plantation data.')));
+    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Map, offline recording and phone notifications are coming next. Everything you see here is your real plantation data.')));
   };
   const kpi = (l, v, sub, href) => h('a', { class: 'kpi', href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), sub ? h('div', { class: 's' }, sub) : null);
 
@@ -375,7 +376,7 @@
         h('div', { class: 'chips' }, list.map((b) => h('a', { class: 'chip', href: '#p-' + b.no }, 'P' + b.no))));
     })));
 
-    root.append(sec('Key dates by peringkat'));
+    root.append(sec('Key dates by peringkat', xpBtn(SPEC.keyDates, 'Key dates by peringkat')));
     const rows = D.batches.map((b) => {
       const i = batchInfo(b);
       return h('a', { class: 'grow', href: '#p-' + b.no },
@@ -561,7 +562,7 @@
         h('small', {}, `${g.quantity || ''}${g.value_note ? ' · ' + g.value_note : ''}${g.conditions ? ' · Conditions: ' + g.conditions : ''}`),
         used.length ? h('small', {}, 'Planted in Peringkat ' + [...new Set(used)].sort((a, b) => a - b).join(', ')) : null), pill(g.status, 'green'));
     })));
-    root.append(sec('Planting material received'));
+    root.append(sec('Planting material received', xpBtn(SPEC.material, 'Planting material')));
     const tot = D.receipts.reduce((s, r) => s + r.qty, 0);
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'mrow ghead' }, h('span', {}, 'Ref · from'), h('span', {}, 'How'), h('span', { class: 'num' }, 'Qty')),
@@ -647,7 +648,7 @@
       if (unassigned.length) groups.push({ name: 'Contractor not entered', href: '#jobs-none', jobs: unassigned, muted: true });
       const sum = (js) => ({ open: js.filter((j) => OPEN.includes(j.status)).length, toPay: js.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0), paid: js.filter((j) => j.status === 'Paid').reduce((s, j) => s + Number(j.price || 0), 0) });
       const tot = sum(D.jobs);
-      root.append(sec('Summary by contractor'));
+      root.append(sec('Summary by contractor', xpBtn(SPEC.contractors, 'Summary by contractor')));
       root.append(h('div', { class: 'card table' },
         h('div', { class: 'srow ghead' }, h('span', {}, 'Contractor'), h('span', { class: 'num' }, 'Open'), h('span', { class: 'num' }, 'Done, to pay'), h('span', { class: 'num' }, 'Paid')),
         groups.length ? groups.map((g) => { const x = sum(g.jobs); return h('a', { class: 'srow', href: g.href }, h('span', { class: g.muted ? 'lk muted-l' : 'lk' }, g.name), h('span', { class: 'num' }, x.open || '—'), h('span', { class: 'num red-t' }, x.toPay ? rm(x.toPay) : '—'), h('span', { class: 'num green-t' }, x.paid ? rm(x.paid) : '—')); }) : h('p', { class: 'muted' }, 'No contractors yet.'),
@@ -679,7 +680,7 @@
     const payable = (j) => contractor && j.status === 'To pay' && j.price != null && !jobPay(j);
     const payBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => payForm(list.filter((j) => sel.has(j.id))) }, 'Tick jobs to pay');
     const drawPay = () => { const t = list.filter((j) => sel.has(j.id)).reduce((s, j) => s + Number(j.price || 0), 0); payBtn.disabled = !sel.size; payBtn.textContent = sel.size ? `Pay ${contractor.name} · ${sel.size} job${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick jobs to pay'; };
-    root.append(sec(cid || none ? 'Jobs' : 'All jobs'));
+    root.append(sec(cid || none ? 'Jobs' : 'All jobs', xpBtn(() => SPEC.jobs(list, contractor ? `Jobs · ${contractor.name}` : none ? 'Jobs without a contractor' : 'All jobs'), contractor ? `Jobs ${contractor.name}` : 'Jobs')));
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'jrow ghead' + (contractor ? ' sel' : '') }, contractor ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Job'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
       list.length ? list.map((j) => {
@@ -695,7 +696,7 @@
 
     const pays = D.pays.filter((p) => (cid ? p.contractor_id === cid : !none)).sort((a, b) => b.ref.localeCompare(a.ref));
     if (!none) {
-      root.append(sec('Payments to contractors'));
+      root.append(sec('Payments to contractors', xpBtn(() => SPEC.payments(pays, contractor ? `Payments to ${contractor.name}` : undefined), 'Contractor payments')));
       root.append(card(pays.length ? pays.map((p) => linkRow('#pay-' + p.ref, `${p.ref} · ${rm(p.amount)}`, `${p.contractor_name || ''} · ${dstr(p.paid_on)} · ${p.method} · ${p.paid_by}`, pill('Paid', 'green'))) : h('p', { class: 'muted' }, 'No payments yet.')));
     }
   };
@@ -850,7 +851,7 @@
       kv('Paid to', p.contractor_id ? h('a', { href: '#jobs-c-' + p.contractor_id }, p.contractor_name) : p.contractor_name),
       kv('Amount', rm(p.amount)), kv('Paid on', dstr(p.paid_on)), kv('Method', p.method), kv('Paid by', p.paid_by, true),
       p.note ? kv('Note', p.note, true) : null));
-    root.append(sec('Jobs in this payment'));
+    root.append(sec('Jobs in this payment', xpBtn(() => { const sp = SPEC.jobs(jobs, `Payment ${p.ref} · ${p.contractor_name || ''}`); sp.sub = `Paid ${dstr(p.paid_on)} · ${p.method} · ${p.paid_by}${p.note ? ' · ' + p.note : ''}`; return sp; }, `Payment ${p.ref}`)));
     root.append(card(jobs.map((j) => linkRow('#job-' + j.ref, `${j.ref} · ${jobName(j)}`, `${jobPlots(j)} · ${jobDate(j)}`, rm(j.price))),
       h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(p.amount)))));
     root.append(attachBox('payment', p.id, 'Transfer slip & invoice'));
@@ -964,7 +965,7 @@
         D.picks.length ? [h('small', { class: 'muted' }, `${D.picks.length} pick${D.picks.length > 1 ? 's' : ''} recorded`), h('div', { class: 'h big' }, `${fmt(tot.fruit)} fruit picked`), h('div', {}, `Sold ${rm(tot.sold)} · buyers owe ${rm(tot.owes)}`)]
           : [h('div', { class: 'h big' }, 'No harvest yet'), h('small', { class: 'muted' }, 'Record each pick here: fruit by grade, the price per fruit that day, and who bought it.')]));
       if (D.buyers.length || D.picks.length) {
-        root.append(sec('Summary by buyer'));
+        root.append(sec('Summary by buyer', xpBtn(SPEC.buyers, 'Summary by buyer')));
         const rows = D.buyers.map((b) => ({ name: b.name, href: '#sales-b-' + b.id, x: sumOf(D.picks.filter((k) => k.buyer_id === b.id)) }));
         root.append(h('div', { class: 'card table' },
           h('div', { class: 'srow ghead' }, h('span', {}, 'Buyer'), h('span', { class: 'num' }, 'Fruit'), h('span', { class: 'num' }, 'Buyer owes'), h('span', { class: 'num' }, 'Received')),
@@ -990,7 +991,7 @@
     const payable = (k) => buyer && !pickRc(k) && pickAmt(k) > 0;
     const recvBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => receiptForm(list.filter((k) => sel.has(k.id))) }, 'Tick picks paid');
     const drawRecv = () => { const t = list.filter((k) => sel.has(k.id)).reduce((s, k) => s + pickAmt(k), 0); recvBtn.disabled = !sel.size; recvBtn.textContent = sel.size ? `Record payment from ${buyer.name} · ${rm(t)}` : 'Tick picks paid'; };
-    root.append(sec('Harvest picks'));
+    root.append(sec('Harvest picks', xpBtn(() => SPEC.picks(list, buyer ? `Harvest picks · ${buyer.name}` : undefined), 'Harvest picks')));
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'jrow ghead' + (buyer ? ' sel' : '') }, buyer ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Pick'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
       list.length ? list.map((k) => {
@@ -1005,7 +1006,7 @@
     if (buyer && list.some(payable)) root.append(h('div', { class: 'pay-bar' }, recvBtn));
 
     const rcs = D.rcs.filter((r) => (bid ? r.buyer_id === bid : true)).sort((a, b) => b.ref.localeCompare(a.ref));
-    root.append(sec('Payments received'));
+    root.append(sec('Payments received', xpBtn(() => SPEC.receipts(rcs, buyer ? `Payments from ${buyer.name}` : undefined), 'Buyer payments')));
     root.append(card(rcs.length ? rcs.map((r) => linkRow('#rc-' + r.ref, `${r.ref} · ${rm(r.amount)}`, `${r.buyer_name || ''} · ${dstr(r.received_on)} · ${r.method} · ${r.received_by}`, pill('Received', 'green'))) : h('p', { class: 'muted' }, 'No payments received yet.')));
   };
 
@@ -1155,7 +1156,7 @@
       kv('From', r.buyer_id ? h('a', { href: '#sales-b-' + r.buyer_id }, r.buyer_name) : r.buyer_name),
       kv('Amount', rm(r.amount)), kv('Received on', dstr(r.received_on)), kv('Method', r.method), kv('Money went to', r.received_by, true),
       r.note ? kv('Note', r.note, true) : null));
-    root.append(sec('Picks in this payment'));
+    root.append(sec('Picks in this payment', xpBtn(() => { const sp = SPEC.picks(picks, `Payment ${r.ref} · ${r.buyer_name || ''}`); sp.sub = `Received ${dstr(r.received_on)} · ${r.method} · ${r.received_by}${r.note ? ' · ' + r.note : ''}`; return sp; }, `Payment ${r.ref}`)));
     root.append(card(picks.map((k) => linkRow('#pick-' + k.ref, `${k.ref} · ${fmt(pickFruit(k))} fruit`, `${pickPlots(k)} · ${dstr(k.picked_on)}`, rm(pickAmt(k)))),
       h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(r.amount)))));
     root.append(attachBox('receipt', r.id, 'Bank slip & payment advice'));
@@ -1196,7 +1197,7 @@
       const rows = D.members.filter((m) => m.active || D.expenses.some((e) => e.member_id === m.id)).map((m) => ({ name: m.display_name, href: '#exp-m-' + m.id, x: sumOf(D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool)) }));
       const tot = sumOf(D.expenses);
       const poolTot = D.expenses.filter((e) => e.paid_from_pool).reduce((s, e) => s + Number(e.amount), 0);
-      root.append(sec('Summary by partner'));
+      root.append(sec('Summary by partner', xpBtn(SPEC.partnersExp, 'Expense by partner')));
       root.append(h('div', { class: 'card table' },
         h('div', { class: 'srow ghead' }, h('span', {}, 'Partner'), h('span', { class: 'num' }, 'Not claimed'), h('span', { class: 'num' }, 'Claimed, unpaid'), h('span', { class: 'num' }, 'Paid')),
         rows.map((r) => h('a', { class: 'srow', href: r.href }, h('span', { class: 'lk' }, r.name), h('span', { class: 'num' }, r.x.open ? rm(r.x.open) : '—'), h('span', { class: 'num red-t' }, r.x.claimed ? rm(r.x.claimed) : '—'), h('span', { class: 'num green-t' }, r.x.paid ? rm(r.x.paid) : '—'))),
@@ -1216,7 +1217,7 @@
     const claimable = (e) => canClaim && !e.paid_from_pool && !exClaim(e);
     const claimBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => claimForm(list.filter((e) => sel.has(e.id))) }, 'Tick expenses to claim');
     const drawClaim = () => { const t = list.filter((e) => sel.has(e.id)).reduce((s, e) => s + Number(e.amount), 0); claimBtn.disabled = !sel.size; claimBtn.textContent = sel.size ? `Claim ${sel.size} expense${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick expenses to claim'; };
-    root.append(sec('Expenses'));
+    root.append(sec('Expenses', xpBtn(() => SPEC.expenses(list, member ? `Expenses · ${member.display_name}` : pool ? 'Expenses paid from the pool' : undefined), 'Expenses')));
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'jrow ghead' + (canClaim ? ' sel' : '') }, canClaim ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Expense'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
       list.length ? list.map((e) => {
@@ -1233,7 +1234,7 @@
 
     if (!pool) {
       const cls = D.claims.filter((c) => (mid ? c.member_id === mid : true)).sort((a, b) => b.ref.localeCompare(a.ref));
-      root.append(sec('Claims'));
+      root.append(sec('Claims', xpBtn(() => SPEC.claims(cls, member ? `Claims · ${member.display_name}` : undefined), 'Claims')));
       root.append(card(cls.length ? cls.map((c) => linkRow('#cl-' + c.ref, `${c.ref} · ${rm(c.amount)}`, `${memberName(c.member_id)} · claimed ${dstr(c.submitted_on)}${c.status === 'Paid' ? ` · paid ${dstr(c.paid_on)} by ${memberName(c.paid_by)}` : ''}`, pill(c.status === 'Paid' ? 'Paid' : 'Claimed, unpaid', c.status === 'Paid' ? 'green' : 'amber'))) : h('p', { class: 'muted' }, 'No claims yet.')));
     }
   };
@@ -1328,7 +1329,7 @@
       paid ? kv('Paid on', dstr(c.paid_on)) : null, paid ? kv('Paid by', memberName(c.paid_by)) : null,
       pv && pv.account_no ? kv('Pay to', `${pv.bank_name || 'Bank'} · ${pv.account_holder || ''} · ${pv.account_no}`, true) : null,
       c.note ? kv('Note', c.note, true) : null));
-    root.append(sec('Expenses in this claim'));
+    root.append(sec('Expenses in this claim', xpBtn(() => SPEC.claimOne(c), `Claim ${c.ref}`)));
     root.append(card(exps.map((e) => linkRow('#ex-' + e.ref, e.what || e.type, `${dstr(e.spent_on)} · ${e.type}${exHasReceipt(e) ? ' · receipt ✓' : ' · no receipt yet'}`, rm(e.amount))),
       h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(c.amount)))));
     if (!paid && !mine) root.append(h('button', { class: 'btn primary', type: 'button', onclick: () => openSheet(`Mark ${c.ref} paid`, [
@@ -1414,7 +1415,7 @@
     if (g) root.append(h('a', { class: 'banner', href: '#agencies' }, h('span', {}, h('b', {}, `Grants received: ${g.quantity || g.title}`), h('small', {}, `${g.ref} · ${g.title}${g.conditions ? ' · conditions: ' + g.conditions : ''}`)), h('span', { class: 'chev' }, '›')));
 
     const act = D.members.filter((m) => m.active);
-    root.append(sec('Partners and profit shares'));
+    root.append(sec('Partners and profit shares', xpBtn(SPEC.finance, 'Capital and shares')));
     root.append(card(act.map((m) => {
       const share = M.pool ? Number(m.capital || 0) / M.pool : 0;
       return h('a', { class: 'trow', href: '#partner-' + m.id }, h('span', { class: 'avatar' }, initials(m.display_name)),
@@ -1424,7 +1425,7 @@
     root.append(h('p', { class: 'muted small foot' }, 'Profit is shared by capital paid in, after all costs. Landowners get rent only.'));
 
     root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => purchaseForm(null) }, '+ Record a purchase or payment'));
-    root.append(sec('Purchases'));
+    root.append(sec('Purchases', xpBtn(SPEC.purchases, 'Purchases')));
     const list = [...D.purchases].sort((a, b) => String(b.purchased_on || '').localeCompare(String(a.purchased_on || '')) || b.ref.localeCompare(a.ref));
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'mrow p ghead' }, h('span', {}, 'Category · item · from'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'For')),
@@ -1434,7 +1435,7 @@
         h('span', { class: 'small-t' }, p.for_batches || '—'))) : h('p', { class: 'muted' }, 'No purchases yet.')));
     if (list.some((p) => p.amount == null)) root.append(h('p', { class: 'muted small foot' }, '"Enter price" = planting material from the planter\'s records, waiting for its price. Tap it to add the price.'));
 
-    root.append(sec('Where the money went'));
+    root.append(sec('Where the money went', xpBtn(SPEC.spend, 'Where the money went')));
     const cats = Object.entries(M.by).sort((a, b) => b[1] - a[1]);
     root.append(card(cats.length ? cats.map(([k, v]) => h('div', { class: 'spend' }, h('div', { class: 'spend-top' }, h('span', {}, k), h('b', {}, rm(v))), h('div', { class: 'spend-track' }, h('div', { class: 'spend-bar', style: `width:${Math.max(1, v / M.spent * 100)}%` }))))
       : h('p', { class: 'muted' }, 'No costs entered yet. Enter prices on the purchases above and costs on each job.')));
@@ -1554,6 +1555,7 @@
 
   PAGES.alerts = (root) => {
     setHead('All alerts', 'Urgent issues, open and closed', ['Home', '#']);
+    root.append(h('div', { class: 'sec' }, h('span', {}), xpBtn(SPEC.alerts, 'Alerts')));
     root.append(h('button', { class: 'btn alert-btn', type: 'button', onclick: alertForm }, svg('<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>'), 'Report urgent issue'));
     const list = [...D.alerts].sort((a, b) => (a.status === 'Closed') - (b.status === 'Closed') || String(b.reported_at).localeCompare(String(a.reported_at)));
     root.append(card(list.length ? list.map((a) => linkRow('#alert-' + a.ref, `${a.ref} · ${a.type}`, `${a.location || 'Whole plantation'} · ${a.urgency} · ${ago(a.reported_at)}`, pill(a.status, alKind(a.status)))) : h('p', { class: 'muted' }, 'No alerts yet. Good.')));
@@ -1590,13 +1592,217 @@
     root.append(attachBox('alert', a.id, 'Photos'));
   };
 
+  // ================= REPORTS: EXCEL AND PDF (Stage 6) =================
+  // A table spec: { title, sub?, cols: [{ h, t: 'text'|'money'|'int', w? }], rows: [[...]], foot?: [...] }
+  const loaded = {};
+  function loadScript(src) {
+    if (!loaded[src]) loaded[src] = new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error('Could not load the report tool. Check your internet connection.')); }; document.head.append(s); });
+    return loaded[src];
+  }
+  const safe = (v) => String(v ?? '').replace(/−/g, '-').replace(/✓/g, 'yes').replace(/[←-⇿]/g, '');
+  const stamp = () => { const d = new Date(); return `${dstr(today())} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const fileBase = (title) => `${D.plantation.name} - ${title} - ${today()}`.replace(/[\\/:*?"<>|]+/g, '-');
+
+  async function makeXlsx(specs) {
+    await loadScript('vendor/write-excel-file.min.js');
+    const sheets = specs.map((sp, i) => {
+      const bold = { fontWeight: 'bold' };
+      const head = [[{ value: D.plantation.name, ...bold, fontSize: 14 }], [{ value: sp.title, ...bold }], [{ value: `${sp.sub ? sp.sub + ' · ' : ''}Made ${stamp()} by ${D.me.display_name}` }], []];
+      const cell = (v, c) => {
+        if (v == null || v === '') return null;
+        if ((c.t === 'money' || c.t === 'int') && typeof v === 'number' && isFinite(v)) return { value: c.t === 'money' ? Math.round(v * 100) / 100 : v, type: Number, format: c.t === 'money' ? '#,##0.00' : '#,##0' };
+        return { value: safe(v), type: String };
+      };
+      const data = [...head, sp.cols.map((c) => ({ value: c.h, ...bold, backgroundColor: '#E8EFE9', align: c.t === 'text' ? 'left' : 'right' })),
+        ...sp.rows.map((r) => r.map((v, j) => cell(v, sp.cols[j]))),
+        ...(sp.foot ? [sp.foot.map((v, j) => { const c = cell(v, sp.cols[j]); return c ? { ...c, ...bold } : null; })] : [])];
+      const name = (sp.sheet || sp.title).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet' + (i + 1);
+      return { data, sheet: name, columns: sp.cols.map((c) => ({ width: c.w || (c.t === 'text' ? 28 : 14) })), stickyRowsCount: 5 };
+    });
+    return await writeXlsxFile(sheets).toBlob();
+  }
+
+  async function makePdf(specs) {
+    await loadScript('vendor/jspdf.umd.min.js');
+    await loadScript('vendor/jspdf.plugin.autotable.min.js');
+    const wide = specs.some((s) => s.cols.length > 5);
+    const doc = new window.jspdf.jsPDF({ orientation: wide ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth();
+    const fmtCell = (v, c) => (v == null || v === '' ? '' : (c.t === 'money' && typeof v === 'number') ? money2(v) : (c.t === 'int' && typeof v === 'number') ? fmt(v) : safe(v));
+    specs.forEach((sp, i) => {
+      if (i) doc.addPage();
+      doc.setFillColor(31, 77, 58); doc.rect(0, 0, W, 22, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(safe(`LadangKita · ${D.plantation.name}`), 12, 10);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(safe(`Made ${stamp()} by ${D.me.display_name}`), 12, 16);
+      doc.setTextColor(27, 31, 28); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text(safe(sp.title), 12, 32);
+      let y = 34;
+      if (sp.sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(92, 99, 94); const lines = doc.splitTextToSize(safe(sp.sub), W - 24); doc.text(lines, 12, 38); y = 36 + lines.length * 4.2; }
+      const align = (c) => (c.t === 'text' ? 'left' : 'right');
+      doc.autoTable({
+        startY: y + 3, margin: { left: 12, right: 12, bottom: 16 },
+        head: [sp.cols.map((c) => ({ content: c.h, styles: { halign: align(c) } }))],
+        body: sp.rows.map((r) => r.map((v, j) => fmtCell(v, sp.cols[j]))),
+        foot: sp.foot ? [sp.foot.map((v, j) => ({ content: fmtCell(v, sp.cols[j]), styles: { halign: align(sp.cols[j]) } }))] : undefined,
+        showFoot: 'lastPage',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, textColor: [27, 31, 28], lineColor: [228, 226, 216], lineWidth: 0.1 },
+        headStyles: { fillColor: [31, 77, 58], textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [238, 243, 239], textColor: [27, 31, 28], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [250, 249, 245] },
+        columnStyles: Object.fromEntries(sp.cols.map((c, j) => [j, { halign: align(c) }]))
+      });
+    });
+    const n = doc.getNumberOfPages();
+    for (let p = 1; p <= n; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(120, 126, 122); doc.text(`Page ${p} of ${n}`, W - 12, doc.internal.pageSize.getHeight() - 8, { align: 'right' }); }
+    return doc.output('blob');
+  }
+
+  // The export sheet: choose Excel or PDF, optionally save to Reports, then save or share on the phone.
+  function exportSheet(getSpecs, title) {
+    const f = $('sheet');
+    const keep = h('input', { type: 'checkbox', id: 'xp-keep', checked: true });
+    const status = h('p', { class: 'muted small', role: 'status' });
+    const go = async (kind, btn) => {
+      btns.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      status.textContent = kind === 'pdf' ? 'Making the PDF…' : 'Making the Excel file…';
+      try {
+        const specs = getSpecs();
+        const blob = kind === 'pdf' ? await makePdf(specs) : await makeXlsx(specs);
+        const ext = kind === 'pdf' ? 'pdf' : 'xlsx';
+        const type = kind === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        const name = `${fileBase(title)}.${ext}`;
+        let saved = false;
+        if (keep.checked) {
+          status.textContent = 'Saving to Reports…';
+          const uid = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+          const path = `${D.plantation.id}/reports/${today().slice(0, 7)}/${uid}.${ext}`;
+          const up = await sb.storage.from('files').upload(path, blob, { contentType: type });
+          if (up.error) throw up.error;
+          const { error } = await sb.from('reports').insert({ plantation_id: D.plantation.id, name, storage_path: path, bytes: blob.size, made_by: D.me.id });
+          if (error) { await sb.storage.from('files').remove([path]); throw error; }
+          saved = true;
+          reloadReports();
+        }
+        readySheet(name, blob, type, saved);
+      } catch (ex) {
+        status.textContent = friendly(ex);
+        btns.querySelectorAll('button').forEach((b) => (b.disabled = false));
+      }
+    };
+    const btns = h('div', { class: 'sheet-btns' },
+      h('button', { class: 'btn primary', type: 'button', onclick: (e) => go('xlsx', e.currentTarget) }, 'Excel'),
+      h('button', { class: 'btn primary', type: 'button', onclick: (e) => go('pdf', e.currentTarget) }, 'PDF'));
+    f.onsubmit = (e) => e.preventDefault(); f.oninput = null; f.onchange = null;
+    f.replaceChildren(h('div', { class: 'h sheet-title' }, `Export · ${title}`),
+      h('p', { class: 'muted small' }, 'Excel is best for working with the numbers; PDF is best for sending or printing.'),
+      h('label', { class: 'check', for: 'xp-keep' }, keep, h('span', {}, 'Also save to Reports, so all partners can open it (kept 12 months)')),
+      btns, status, h('button', { class: 'btn ghost', type: 'button', onclick: closeSheet }, 'Cancel'));
+    $('sheet-wrap').hidden = false; document.body.classList.add('sheet-open');
+  }
+
+  function readySheet(name, blob, type, saved) {
+    const f = $('sheet');
+    const file = new File([blob], name, { type });
+    const url = URL.createObjectURL(blob);
+    const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+    const save = h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+      if (canShare) { try { await navigator.share({ files: [file], title: name }); return; } catch (ex) { if (ex && ex.name === 'AbortError') return; } }
+      const a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+    } }, canShare ? 'Save or share' : 'Download');
+    f.replaceChildren(h('div', { class: 'h sheet-title' }, 'Ready'),
+      h('div', { class: 'pay-items' }, h('div', { class: 'pi' }, h('span', {}, name), h('b', {}, `${Math.max(1, Math.round(blob.size / 1024))} KB`))),
+      h('p', { class: 'muted small' }, (saved ? 'Saved to Reports for all partners. ' : '') + (canShare ? 'Tap Save or share to keep it on this phone (Save to Files) or send it by WhatsApp or email.' : 'Tap Download to keep a copy on this device.')),
+      save, h('button', { class: 'btn ghost', type: 'button', onclick: () => { URL.revokeObjectURL(url); closeSheet(); if (location.hash === '#reports') route(); } }, 'Done'));
+  }
+
+  const xpBtn = (getSpecs, title) => h('button', { class: 'btn small-btn xp', type: 'button', onclick: () => exportSheet(() => [].concat(getSpecs()), title) }, svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'), 'Excel / PDF');
+
+  // ---------- table specs ----------
+  const SPEC = {
+    keyDates: () => ({ title: 'Key dates by peringkat', sheet: 'Peringkat', cols: [{ h: 'Peringkat', t: 'text', w: 14 }, { h: 'Blok', t: 'text', w: 16 }, { h: 'Planted', t: 'text', w: 14 }, { h: 'Variety', t: 'text', w: 12 }, { h: 'Plants', t: 'int' }, { h: 'Age (months)', t: 'int' }, { h: 'Est. area (ac)', t: 'money' }, { h: 'Last work', t: 'text', w: 14 }, { h: 'Next work', t: 'text', w: 26 }],
+      rows: D.batches.map((b) => { const i = batchInfo(b); return [b.name, i.blockNames.join(' + '), dstr(b.planted_on), b.variety || '', b.plants, i.age, i.area != null ? Number(i.area) : null, i.lastWork ? dstr(i.lastWork.start_on) : '', i.next ? `${i.next.category} ${i.next.start_on ? dstr(i.next.start_on) : i.next.date_note || ''}` : '']; }),
+      foot: ['Total', '', '', '', D.batches.reduce((s, b) => s + b.plants, 0), null, D.batches.reduce((s, b) => s + Number(b.measured_acres ?? b.est_acres ?? 0), 0), '', ''] }),
+    jobs: (list, title = 'Jobs') => ({ title, sheet: 'Jobs', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Date', t: 'text', w: 14 }, { h: 'Job', t: 'text', w: 26 }, { h: 'Peringkat', t: 'text', w: 16 }, { h: 'Contractor', t: 'text', w: 20 }, { h: 'Products', t: 'text', w: 24 }, { h: 'Status', t: 'text', w: 12 }, { h: 'Payment', t: 'text', w: 9 }, { h: 'RM', t: 'money' }],
+      rows: list.map((j) => [j.ref, jobDate(j), jobName(j), jobPlots(j), jobWho(j) || '', j.products || '', statusLabel(j), jobPay(j)?.ref || '', j.price != null ? Number(j.price) : null]),
+      foot: ['Total', '', `${list.length} jobs`, '', '', '', '', '', list.reduce((s, j) => s + Number(j.price || 0), 0)] }),
+    contractors: () => { const g = D.contractors.map((c) => [c.name, D.jobs.filter((j) => j.contractor_id === c.id)]); const un = D.jobs.filter((j) => !j.contractor_id); if (un.length) g.push(['Contractor not entered', un]);
+      const x = (js) => [js.filter((j) => OPEN.includes(j.status)).length, js.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0), js.filter((j) => j.status === 'Paid').reduce((s, j) => s + Number(j.price || 0), 0)];
+      return { title: 'Summary by contractor', sheet: 'Contractors', cols: [{ h: 'Contractor', t: 'text' }, { h: 'Open jobs', t: 'int' }, { h: 'Done, to pay (RM)', t: 'money', w: 18 }, { h: 'Paid (RM)', t: 'money' }], rows: g.map(([n, js]) => [n, ...x(js)]), foot: ['Total', ...x(D.jobs)] }; },
+    payments: (list, title = 'Payments to contractors') => ({ title, sheet: 'Contractor payments', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Paid on', t: 'text', w: 14 }, { h: 'Contractor', t: 'text', w: 22 }, { h: 'Jobs', t: 'text', w: 22 }, { h: 'Method', t: 'text', w: 14 }, { h: 'Paid by', t: 'text', w: 18 }, { h: 'RM', t: 'money' }],
+      rows: list.map((p) => [p.ref, dstr(p.paid_on), p.contractor_name || '', D.pj.filter((x) => x.payment_id === p.id).map((x) => D.jobs.find((j) => j.id === x.job_id)?.ref).filter(Boolean).join(', '), p.method, p.paid_by, Number(p.amount)]),
+      foot: ['Total', '', '', '', '', '', list.reduce((s, p) => s + Number(p.amount || 0), 0)] }),
+    picks: (list, title = 'Harvest picks') => ({ title, sheet: 'Harvest picks', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Date', t: 'text', w: 14 }, { h: 'Peringkat', t: 'text', w: 14 }, { h: 'Buyer', t: 'text', w: 20 }, { h: 'A', t: 'int', w: 8 }, { h: 'RM/A', t: 'money', w: 8 }, { h: 'B', t: 'int', w: 8 }, { h: 'RM/B', t: 'money', w: 8 }, { h: 'C', t: 'int', w: 8 }, { h: 'RM/C', t: 'money', w: 8 }, { h: 'Fruit', t: 'int', w: 9 }, { h: 'RM', t: 'money' }, { h: 'Paid', t: 'text', w: 9 }],
+      rows: list.map((k) => [k.ref, dstr(k.picked_on), pickPlots(k), pickWho(k) || '', Number(k.grade_a), Number(k.price_a), Number(k.grade_b), Number(k.price_b), Number(k.grade_c), Number(k.price_c), pickFruit(k), pickAmt(k), pickRc(k)?.ref || 'owed']),
+      foot: ['Total', '', '', '', list.reduce((s, k) => s + Number(k.grade_a), 0), null, list.reduce((s, k) => s + Number(k.grade_b), 0), null, list.reduce((s, k) => s + Number(k.grade_c), 0), null, list.reduce((s, k) => s + pickFruit(k), 0), list.reduce((s, k) => s + pickAmt(k), 0), ''] }),
+    buyers: () => { const x = (ks) => [ks.reduce((s, k) => s + pickFruit(k), 0), ks.reduce((s, k) => s + pickAmt(k), 0), ks.filter((k) => !pickRc(k)).reduce((s, k) => s + pickAmt(k), 0), ks.filter((k) => pickRc(k)).reduce((s, k) => s + pickAmt(k), 0)];
+      return { title: 'Summary by buyer', sheet: 'Buyers', cols: [{ h: 'Buyer', t: 'text' }, { h: 'Fruit', t: 'int' }, { h: 'Sold (RM)', t: 'money' }, { h: 'Buyer owes (RM)', t: 'money', w: 16 }, { h: 'Received (RM)', t: 'money' }], rows: D.buyers.map((b) => [b.name, ...x(D.picks.filter((k) => k.buyer_id === b.id))]), foot: ['Total', ...x(D.picks)] }; },
+    receipts: (list, title = 'Payments received from buyers') => ({ title, sheet: 'Buyer payments', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Received on', t: 'text', w: 14 }, { h: 'Buyer', t: 'text', w: 22 }, { h: 'Picks', t: 'text', w: 22 }, { h: 'Method', t: 'text', w: 14 }, { h: 'Money went to', t: 'text', w: 18 }, { h: 'RM', t: 'money' }],
+      rows: list.map((r) => [r.ref, dstr(r.received_on), r.buyer_name || '', D.rp.filter((x) => x.receipt_id === r.id).map((x) => D.picks.find((k) => k.id === x.pick_id)?.ref).filter(Boolean).join(', '), r.method, r.received_by, Number(r.amount)]),
+      foot: ['Total', '', '', '', '', '', list.reduce((s, r) => s + Number(r.amount || 0), 0)] }),
+    expenses: (list, title = 'Expenses') => ({ title, sheet: 'Expenses', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Date', t: 'text', w: 14 }, { h: 'Paid by', t: 'text', w: 18 }, { h: 'Type', t: 'text', w: 14 }, { h: 'What for', t: 'text', w: 28 }, { h: 'Receipt', t: 'text', w: 9 }, { h: 'Status', t: 'text', w: 16 }, { h: 'RM', t: 'money' }],
+      rows: list.map((e) => [e.ref, dstr(e.spent_on), exWho(e), e.type, e.what || '', exHasReceipt(e) ? 'yes' : 'no', exStatus(e)[0] + (exClaim(e) ? ' ' + exClaim(e).ref : ''), Number(e.amount)]),
+      foot: ['Total', '', '', '', '', '', '', list.reduce((s, e) => s + Number(e.amount || 0), 0)] }),
+    partnersExp: () => { const x = (es) => [es.filter((e) => !e.paid_from_pool && !exClaim(e)).reduce((s, e) => s + Number(e.amount), 0), es.filter((e) => exClaim(e)?.status === 'Claimed').reduce((s, e) => s + Number(e.amount), 0), es.filter((e) => exClaim(e)?.status === 'Paid').reduce((s, e) => s + Number(e.amount), 0)];
+      return { title: 'Expense summary by partner', sheet: 'Expense by partner', cols: [{ h: 'Partner', t: 'text' }, { h: 'Not claimed (RM)', t: 'money', w: 16 }, { h: 'Claimed, unpaid (RM)', t: 'money', w: 18 }, { h: 'Paid (RM)', t: 'money' }], rows: D.members.map((m) => [m.display_name, ...x(D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool))]), foot: ['Total', ...x(D.expenses)] }; },
+    claims: (list, title = 'Claims') => ({ title, sheet: 'Claims', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Partner', t: 'text', w: 18 }, { h: 'Claimed on', t: 'text', w: 14 }, { h: 'Expenses', t: 'text', w: 24 }, { h: 'Status', t: 'text', w: 10 }, { h: 'Paid on', t: 'text', w: 14 }, { h: 'Paid by', t: 'text', w: 16 }, { h: 'RM', t: 'money' }],
+      rows: list.map((c) => [c.ref, memberName(c.member_id), dstr(c.submitted_on), D.ce.filter((x) => x.claim_id === c.id).map((x) => D.expenses.find((e) => e.id === x.expense_id)?.ref).filter(Boolean).join(', '), c.status, c.paid_on ? dstr(c.paid_on) : '', c.paid_by ? memberName(c.paid_by) : '', Number(c.amount)]),
+      foot: ['Total', '', '', '', '', '', '', list.reduce((s, c) => s + Number(c.amount || 0), 0)] }),
+    claimOne: (c) => { const es = D.ce.filter((x) => x.claim_id === c.id).map((x) => D.expenses.find((e) => e.id === x.expense_id)).filter(Boolean); const sp = SPEC.expenses(es, `Claim ${c.ref} · ${memberName(c.member_id)}`); sp.sub = `Claimed ${dstr(c.submitted_on)} · ${c.status === 'Paid' ? `paid ${dstr(c.paid_on)} by ${memberName(c.paid_by)}` : 'not paid yet'}${c.note ? ' · ' + c.note : ''}`; return sp; },
+    purchases: () => { const list = [...D.purchases].sort((a, b) => a.ref.localeCompare(b.ref)); return { title: 'Purchases', sheet: 'Purchases', cols: [{ h: 'Ref', t: 'text', w: 9 }, { h: 'Date', t: 'text', w: 14 }, { h: 'Category', t: 'text', w: 18 }, { h: 'Item', t: 'text', w: 22 }, { h: 'From', t: 'text', w: 20 }, { h: 'For', t: 'text', w: 12 }, { h: 'Paid by', t: 'text', w: 14 }, { h: 'RM', t: 'money' }],
+      rows: list.map((p) => [p.ref, p.purchased_on ? dstr(p.purchased_on) : p.date_note || '', p.category, p.item || '', p.supplier || '', p.for_batches || '', p.paid_by, p.amount != null ? Number(p.amount) : 'price to enter']),
+      foot: ['Total', '', '', '', '', '', '', list.reduce((s, p) => s + Number(p.amount || 0), 0)] }; },
+    spend: () => { const M = money(); const rows = Object.entries(M.by).sort((a, b) => b[1] - a[1]); return { title: 'Where the money went', sheet: 'Costs by category', cols: [{ h: 'Category', t: 'text', w: 30 }, { h: 'RM', t: 'money' }, { h: '% of costs', t: 'money' }], rows: rows.map(([k, v]) => [k, v, M.spent ? v / M.spent * 100 : 0]), foot: ['Total', M.spent, M.spent ? 100 : 0] }; },
+    finance: () => { const M = money(); const act = D.members.filter((m) => m.active);
+      return { title: 'Capital, profit and shares', sheet: 'Finance', sub: `Capital ${rm(M.pool)} · costs ${rm(M.spent)} · sales ${rm(M.sales)} · ${M.profit < 0 ? 'loss' : 'profit'} ${rm(Math.abs(M.profit))} · cash left about ${rm(M.cash)}`,
+        cols: [{ h: 'Partner', t: 'text' }, { h: 'Capital (RM)', t: 'money' }, { h: 'Share %', t: 'money' }, { h: M.profit < 0 ? 'Share of loss (RM)' : 'Share of profit (RM)', t: 'money', w: 18 }],
+        rows: act.map((m) => { const sh = M.pool ? Number(m.capital || 0) / M.pool : 0; return [m.display_name, Number(m.capital || 0), sh * 100, Math.abs(M.profit) * sh]; }), foot: ['Total', M.pool, M.pool ? 100 : 0, Math.abs(M.profit)] }; },
+    material: () => ({ title: 'Planting material received', sheet: 'Planting material', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Received', t: 'text', w: 14 }, { h: 'From', t: 'text', w: 24 }, { h: 'How', t: 'text', w: 9 }, { h: 'Type', t: 'text', w: 9 }, { h: 'Used for', t: 'text', w: 18 }, { h: 'Qty', t: 'int' }],
+      rows: D.receipts.map((r) => [r.ref, dstr(r.received_on), r.source, r.how, r.type, D.uses.filter((u) => u.receipt_id === r.id).map((u) => u.batch_id ? 'P' + (D.batches.find((b) => b.id === u.batch_id)?.no) : u.use).join(', '), r.qty]),
+      foot: ['Total', '', '', '', '', '', D.receipts.reduce((s, r) => s + r.qty, 0)] }),
+    alerts: () => ({ title: 'Urgent alerts', sheet: 'Alerts', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Reported', t: 'text', w: 16 }, { h: 'Type', t: 'text', w: 22 }, { h: 'Where', t: 'text', w: 16 }, { h: 'Urgency', t: 'text', w: 10 }, { h: 'Status', t: 'text', w: 12 }, { h: 'What happened', t: 'text', w: 30 }, { h: 'Actions', t: 'text', w: 40 }],
+      rows: [...D.alerts].sort((a, b) => a.ref.localeCompare(b.ref)).map((a) => [a.ref, `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, a.type, a.location || '', a.urgency, a.status, a.description || '', alActions(a).map((x) => `${memberName(x.member_id)}: ${x.action}`).join(' | ')]) })
+  };
+  const fullReport = () => [SPEC.finance(), SPEC.spend(), SPEC.keyDates(), SPEC.contractors(), SPEC.jobs(sortJobs(D.jobs)), SPEC.payments(D.pays), SPEC.buyers(), SPEC.picks(sortPicks(D.picks)), SPEC.receipts(D.rcs), SPEC.partnersExp(), SPEC.expenses(sortEx(D.expenses)), SPEC.claims(D.claims), SPEC.purchases(), SPEC.material(), SPEC.alerts()];
+
+  // ---------- Reports page ----------
+  async function reloadReports() { const { data } = await sb.from('reports').select('*').eq('plantation_id', D.plantation.id).order('created_at', { ascending: false }); if (data) D.reports = data; if (location.hash === '#reports' && $('sheet-wrap').hidden) route(); }
+  PAGES.reports = (root) => {
+    setHead('Reports', 'Saved Excel and PDF files for all partners');
+    root.append(h('div', { class: 'card' }, h('div', { class: 'h sheet-head' }, 'Full plantation report'),
+      h('p', { class: 'muted small' }, 'Everything in one file: finance and shares, costs by category, peringkat, jobs and contractor payments, harvest and buyer payments, expenses and claims, purchases, planting material and alerts. Excel puts each part on its own sheet.'),
+      h('button', { class: 'btn gold', type: 'button', onclick: () => exportSheet(fullReport, 'Full report') }, 'Make the full report')));
+    root.append(h('p', { class: 'muted small foot' }, 'Every table in the app also has its own Excel / PDF button.'));
+    const keepM = Number(D.settings.keep_reports_months || 12);
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - keepM);
+    const list = (D.reports || []).filter((r) => new Date(r.created_at) >= cutoff);
+    const old = (D.reports || []).filter((r) => new Date(r.created_at) < cutoff);
+    root.append(sec(`Saved reports (${list.length})`));
+    const box = card(list.length ? list.map((r) => {
+      const a = h('a', { class: 'lrow', href: '#', onclick: async (e) => { e.preventDefault(); const { data, error } = await sb.storage.from('files').createSignedUrl(r.storage_path, 600); if (error) return toast(friendly(error)); window.open(data.signedUrl, '_blank', 'noopener'); } },
+        h('span', { class: 'doc-ico' }, /\.pdf$/i.test(r.storage_path) ? 'PDF' : 'XLS'),
+        h('span', { class: 'lmain' }, h('b', {}, r.name.replace(`${D.plantation.name} - `, '')), h('small', {}, `${memberName(r.made_by)} · ${ago(r.created_at)} · ${Math.max(1, Math.round((r.bytes || 0) / 1024))} KB`)));
+      const del = D.isAdmin ? h('button', { class: 'thumb-x rel', type: 'button', 'aria-label': 'Delete ' + r.name, onclick: async () => {
+        if (!window.confirm('Delete this report for everyone?')) return;
+        await sb.storage.from('files').remove([r.storage_path]);
+        const { error } = await sb.from('reports').delete().eq('id', r.id);
+        if (error) return toast(friendly(error));
+        D.reports = D.reports.filter((x) => x.id !== r.id); route();
+      } }, '×') : null;
+      return h('div', { class: 'rep-row' }, a, del);
+    }) : h('p', { class: 'muted' }, 'No saved reports yet. Use an Excel / PDF button on any table, or make the full report above.'));
+    root.append(box, h('p', { class: 'muted small foot' }, `Reports are kept for ${keepM} months.`));
+    if (D.isAdmin && old.length) (async () => {
+      await sb.storage.from('files').remove(old.map((r) => r.storage_path));
+      await sb.from('reports').delete().in('id', old.map((r) => r.id));
+      D.reports = list;
+    })();
+  };
+
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
   PAGES.map = later('Map', 'Later stage', 'The plantation sketch with blok, peringkat and marks for issues, fences and water.');
-  PAGES.reports = later('Reports', 'Stage 6', 'Excel and PDF reports saved for all partners, kept for 12 months.');
 
   // ================= START =================
   async function start() {
