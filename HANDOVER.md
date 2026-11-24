@@ -50,6 +50,13 @@ Paste this into the new chat. The SQL files and the Edge Function are in this pr
 - Real "Save or share", offline on the iPhone and real notification delivery have not yet been tried on a phone. WanZ's phone has no notification subscription yet.
 - Admin partner: WanZ, wannalhanafi@gmail.com, role admin, login linked. **Decision:** other partners are NOT added during the build; WanZ adds them himself from the Partners page. Don't ask for partner details again.
 
+## Handover to the client/tester (25 Nov 2026)
+- Test data removed from the live database: alert AL-001 (and its 2 actions and photo record), the 1 saved report record. Two leftover files stay in storage (`…/alert/…jpg`, `…/reports/2026-11/….xlsx`); nothing links to them; they can only be removed through Supabase Storage (dashboard), not SQL. The pond mark (deleted during testing) was put back as Water "Kolam".
+- Kept: all planter data (10 jobs, 5 purchases without price, 11 material deliveries + uses, LPNM agency, requirement, grant GR-001, 10 peringkat, 3 crop varieties, 21 cost categories).
+- Decision: the client will be an **admin partner too**; WanZ stays admin; **WanZ adds the client himself** on ☰ Rakan Kongsi (name, email, capital, admin). Both use the app at the same time for monitoring and corrections.
+- Client guide in Malay (Claude Doc): **Panduan LadangKita untuk Kebun Nenas** https://claude.ai/artifact/K1qiTqiw24fHFq3dmAxLJ8 (getting started, screens, daily tasks, first things to complete, offline/reports/help, first-week checklist). WanZ shares it or exports it as PDF for WhatsApp.
+- Risk to watch: the built-in Supabase email sender only sends a few sign-in emails per hour. Fine for one client signing in once; set up a custom email sender before more partners join.
+
 ## Next steps
 1. WanZ keeps testing on his iPhone and reports gaps (like the alert-page exit and the Agencies page).
 2. WanZ checks the Malay wording on his phone and lists anything that reads oddly; fixes go in `i18n/`.
