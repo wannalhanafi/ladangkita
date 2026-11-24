@@ -148,7 +148,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -172,9 +172,12 @@
       q('harvest_picks'),
       q('pick_batches'),
       q('buyer_receipts').order('ref'),
-      q('receipt_picks')
+      q('receipt_picks'),
+      q('expenses'),
+      q('claims').order('ref'),
+      q('claim_expenses')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -183,7 +186,8 @@
       blocks: blocks.data, batches: batches.data, bb: bb.data, jobs: jobs.data, jb: jb.data,
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
-      buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data
+      buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
+      expenses: expenses.data, claims: claims.data, ce: ce.data
     };
   }
 
@@ -211,7 +215,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || PAGES.home;
-    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales' }[name] || '';
+    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -344,9 +348,11 @@
       const names = D.jb.filter((x) => x.job_id === j.id).map((x) => D.batches.find((b) => b.id === x.batch_id)).filter(Boolean).map((b) => 'P' + b.no);
       return h('a', { class: 'trow', href: '#job-' + j.ref }, h('span', { class: 'dot gold' }), h('span', { class: 'lmain' }, h('b', {}, jobName(j)), h('small', {}, `${jobDate(j)} · ${names.join(', ')}${jobWho(j) ? ' · ' + jobWho(j) : ''}${j.note ? ' · ' + j.note : ''}`)), pill(j.status, 'gold'));
     }) : h('p', { class: 'muted' }, 'Nothing planned yet.')));
-    root.append(h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs and contractor payments'));
+    const waitingClaims = D.claims.filter(canPayClaim);
+    if (waitingClaims.length) root.append(h('a', { class: 'banner amber-b', href: '#cl-' + waitingClaims[0].ref }, h('span', {}, h('b', {}, `${waitingClaims.length} partner claim${waitingClaims.length > 1 ? 's' : ''} to pay · ${rm(waitingClaims.reduce((s, c) => s + Number(c.amount), 0))}`), h('small', {}, waitingClaims.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '))), h('span', { class: 'chev' }, '›')));
+    root.append(h('div', { class: 'quick' }, h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs'), h('a', { class: 'btn gold', href: '#sales' }, 'Sales'), h('a', { class: 'btn gold', href: '#exp' }, 'Expense')));
     if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
-    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Expense, Finance and Map are coming next. Everything you see here is your real plantation data.')));
+    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Finance, Reports and Map are coming next. Everything you see here is your real plantation data.')));
   };
   const kpi = (l, v, sub, href) => h('a', { class: 'kpi', href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), sub ? h('div', { class: 's' }, sub) : null);
 
@@ -1166,12 +1172,199 @@
     }, 'Cancel payment', true) }, 'Cancel this payment'));
   };
 
+  // ================= EXPENSE AND CLAIMS (Stage 4) =================
+  const EXP_TYPES = [['Transport', 'Transport (petrol, toll, parking)'], ['Meals', 'Meals'], ['Miscellaneous', 'Miscellaneous']];
+  const exClaim = (e) => { const l = D.ce.find((x) => x.expense_id === e.id); return l ? D.claims.find((c) => c.id === l.claim_id) : null; };
+  const exStatus = (e) => { if (e.paid_from_pool) return ['From the pool', 'green']; const c = exClaim(e); return !c ? ['Not claimed', 'gold'] : c.status === 'Paid' ? ['Paid', 'green'] : ['Claimed, unpaid', 'amber']; };
+  const exWho = (e) => (e.paid_from_pool ? 'From the pool' : D.members.find((m) => m.id === e.member_id)?.display_name || 'Partner');
+  const exHasReceipt = (e) => D.atts.some((a) => a.entity === 'expense' && a.entity_id === e.id);
+  const memberName = (id) => D.members.find((m) => m.id === id)?.display_name || '—';
+  const sortEx = (list) => [...list].sort((a, b) => String(b.spent_on).localeCompare(String(a.spent_on)) || b.ref.localeCompare(a.ref));
+  const canPayClaim = (c) => c.status === 'Claimed' && c.member_id !== D.me.id;
+
+  PAGES.exp = (root, arg) => {
+    const mid = arg && arg.startsWith('m-') ? arg.slice(2) : null;
+    const pool = arg === 'pool';
+    const member = mid ? D.members.find((m) => m.id === mid) : null;
+    if (mid && !member) { location.hash = '#exp'; return; }
+    const list = sortEx(D.expenses.filter((e) => (mid ? e.member_id === mid && !e.paid_from_pool : pool ? e.paid_from_pool : true)));
+    if (member) setHead(member.display_name, (member.id === D.me.id ? 'You · ' : '') + 'expenses and claims', ['All partners', '#exp']);
+    else if (pool) setHead('Paid from the pool', 'Small costs paid straight from the plantation account', ['All partners', '#exp']);
+    else setHead('Expense', 'Partners\' own-pocket spending, and claims');
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => expenseForm(null, { member: mid || (pool ? 'pool' : D.me.id) }) }, '+ Add expense'));
+
+    const sumOf = (es) => ({ open: es.filter((e) => !e.paid_from_pool && !exClaim(e)).reduce((s, e) => s + Number(e.amount), 0), claimed: es.filter((e) => exClaim(e)?.status === 'Claimed').reduce((s, e) => s + Number(e.amount), 0), paid: es.filter((e) => exClaim(e)?.status === 'Paid').reduce((s, e) => s + Number(e.amount), 0) });
+    const waiting = D.claims.filter(canPayClaim);
+    if (waiting.length) root.append(h('a', { class: 'banner amber-b', href: '#cl-' + waiting[0].ref }, h('span', {}, h('b', {}, `${waiting.length} claim${waiting.length > 1 ? 's' : ''} waiting to be paid · ${rm(waiting.reduce((s, c) => s + Number(c.amount), 0))}`), h('small', {}, waiting.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '))), h('span', { class: 'chev' }, '›')));
+
+    if (!mid && !pool) {
+      const rows = D.members.filter((m) => m.active || D.expenses.some((e) => e.member_id === m.id)).map((m) => ({ name: m.display_name, href: '#exp-m-' + m.id, x: sumOf(D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool)) }));
+      const tot = sumOf(D.expenses);
+      const poolTot = D.expenses.filter((e) => e.paid_from_pool).reduce((s, e) => s + Number(e.amount), 0);
+      root.append(sec('Summary by partner'));
+      root.append(h('div', { class: 'card table' },
+        h('div', { class: 'srow ghead' }, h('span', {}, 'Partner'), h('span', { class: 'num' }, 'Not claimed'), h('span', { class: 'num' }, 'Claimed, unpaid'), h('span', { class: 'num' }, 'Paid')),
+        rows.map((r) => h('a', { class: 'srow', href: r.href }, h('span', { class: 'lk' }, r.name), h('span', { class: 'num' }, r.x.open ? rm(r.x.open) : '—'), h('span', { class: 'num red-t' }, r.x.claimed ? rm(r.x.claimed) : '—'), h('span', { class: 'num green-t' }, r.x.paid ? rm(r.x.paid) : '—'))),
+        poolTot ? h('a', { class: 'srow', href: '#exp-pool' }, h('span', { class: 'lk muted-l' }, 'From the pool'), h('span', { class: 'num' }, '—'), h('span', { class: 'num' }, '—'), h('span', { class: 'num green-t' }, rm(poolTot))) : null,
+        h('div', { class: 'srow total' }, h('span', {}, 'Total'), h('span', { class: 'num' }, rm(tot.open)), h('span', { class: 'num red-t' }, rm(tot.claimed)), h('span', { class: 'num green-t' }, rm(tot.paid + poolTot)))));
+      if (tot.open > 0) root.append(h('p', { class: 'muted small foot' }, 'To claim, tap your name above, tick your expenses, then tap Claim.'));
+    } else if (member) {
+      const x = sumOf(list);
+      root.append(h('div', { class: 'tiles' },
+        h('div', { class: 'tile' }, h('small', {}, 'Not claimed'), h('div', { class: 'h' }, rm(x.open))),
+        h('div', { class: 'tile' }, h('small', {}, 'Claimed, unpaid'), h('div', { class: 'h' }, rm(x.claimed))),
+        h('div', { class: 'tile' }, h('small', {}, 'Paid'), h('div', { class: 'h' }, rm(x.paid)))));
+    }
+
+    const canClaim = member && (member.id === D.me.id || D.isAdmin);
+    const sel = new Set();
+    const claimable = (e) => canClaim && !e.paid_from_pool && !exClaim(e);
+    const claimBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => claimForm(list.filter((e) => sel.has(e.id))) }, 'Tick expenses to claim');
+    const drawClaim = () => { const t = list.filter((e) => sel.has(e.id)).reduce((s, e) => s + Number(e.amount), 0); claimBtn.disabled = !sel.size; claimBtn.textContent = sel.size ? `Claim ${sel.size} expense${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick expenses to claim'; };
+    root.append(sec('Expenses'));
+    root.append(h('div', { class: 'card table' },
+      h('div', { class: 'jrow ghead' + (canClaim ? ' sel' : '') }, canClaim ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Expense'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      list.length ? list.map((e) => {
+        const c = exClaim(e), st = exStatus(e);
+        const box = claimable(e) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + e.ref, onchange: (ev) => { if (ev.target.checked) sel.add(e.id); else sel.delete(e.id); drawClaim(); } }) : null;
+        return h('div', { class: 'jrow' + (canClaim ? ' sel' : '') }, canClaim ? h('span', { class: 'cb' }, box) : null,
+          h('span', { class: 'd' }, dstr(e.spent_on).replace(/ \d{4}$/, ''), h('small', {}, String(e.spent_on).slice(0, 4))),
+          h('span', {}, h('a', { href: '#ex-' + e.ref }, e.what || e.type), h('small', {}, `${e.ref} · ${e.type}${!member ? ' · ' + exWho(e) : ''}${exHasReceipt(e) ? ' · receipt ✓' : ''}`)),
+          h('span', { class: 'num' }, money2(e.amount)),
+          h('span', {}, pill(st[0], st[1]), c ? h('a', { class: 'pv', href: '#cl-' + c.ref }, c.ref) : null));
+      }) : h('p', { class: 'muted' }, 'No expenses yet.')));
+    if (canClaim && list.some(claimable)) root.append(h('div', { class: 'pay-bar' }, claimBtn));
+    if (member && !canClaim && list.some((e) => !exClaim(e))) root.append(h('p', { class: 'muted small foot' }, `Only ${member.display_name} or the admin partner can claim these expenses.`));
+
+    if (!pool) {
+      const cls = D.claims.filter((c) => (mid ? c.member_id === mid : true)).sort((a, b) => b.ref.localeCompare(a.ref));
+      root.append(sec('Claims'));
+      root.append(card(cls.length ? cls.map((c) => linkRow('#cl-' + c.ref, `${c.ref} · ${rm(c.amount)}`, `${memberName(c.member_id)} · claimed ${dstr(c.submitted_on)}${c.status === 'Paid' ? ` · paid ${dstr(c.paid_on)} by ${memberName(c.paid_by)}` : ''}`, pill(c.status === 'Paid' ? 'Paid' : 'Claimed, unpaid', c.status === 'Paid' ? 'green' : 'amber'))) : h('p', { class: 'muted' }, 'No claims yet.')));
+    }
+  };
+
+  // ---------- one expense ----------
+  PAGES.ex = (root, ref) => {
+    const e = D.expenses.find((x) => x.ref === ref);
+    if (!e) { location.hash = '#exp'; return; }
+    const c = exClaim(e), st = exStatus(e);
+    setHead(`${e.ref} · ${e.what || e.type}`, `${rm(e.amount)} · ${st[0]}`, ['Expense', e.paid_from_pool ? '#exp-pool' : '#exp-m-' + e.member_id]);
+    root.append(h('div', { class: 'card kvs' },
+      kv('Amount', rm(e.amount)), kv('Date', dstr(e.spent_on)), kv('Type', e.type), kv('Paid by', exWho(e)),
+      kv('What for', e.what, true),
+      kv('Claim', c ? h('a', { href: '#cl-' + c.ref }, `${c.ref} · ${c.status === 'Paid' ? 'paid ' + dstr(c.paid_on) : 'claimed, unpaid'}`) : e.paid_from_pool ? 'Not needed (paid from the pool)' : 'Not claimed yet', true)));
+    if (!c) root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => expenseForm(e) }, 'Edit this expense'));
+    else root.append(h('p', { class: 'muted small foot' }, 'This expense is in a claim, so it is locked. Withdraw the claim first to change it.'));
+    root.append(attachBox('expense', e.id, 'Receipt'));
+    if (!c && (D.isAdmin)) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${e.ref}?`, [{ type: 'note', label: `${e.what || e.type} · ${rm(e.amount)} will be removed with its receipt. This cannot be undone.` }], async () => {
+      const paths = D.atts.filter((a) => a.entity === 'expense' && a.entity_id === e.id).map((a) => a.storage_path);
+      if (paths.length) await sb.storage.from('files').remove(paths);
+      await sb.from('attachments').delete().eq('entity', 'expense').eq('entity_id', e.id);
+      const { error } = await sb.from('expenses').delete().eq('id', e.id);
+      if (error) throw error;
+      location.hash = '#exp'; await refresh('Expense deleted');
+    }, 'Delete expense', true) }, 'Delete this expense'));
+  };
+
+  function expenseForm(e, preset = {}) {
+    const isNew = !e;
+    const who0 = e ? (e.paid_from_pool ? 'pool' : e.member_id) : (preset.member || D.me.id);
+    const people = D.members.filter((m) => m.active || m.id === who0).map((m) => [m.id, m.display_name + (m.id === D.me.id ? ' (me)' : '')]);
+    openSheet(isNew ? 'Add an expense' : `Edit ${e.ref}`, [
+      { key: 'type', label: 'Type', type: 'select', value: e?.type || 'Transport', options: EXP_TYPES },
+      { key: 'what', label: 'What for', required: true, value: e?.what, ph: 'e.g. Petrol & toll to farm' },
+      { key: 'who', label: 'Paid by', type: 'select', value: who0, options: [...people, ['pool', 'From the pool (plantation account)']], half: true },
+      { key: 'amount', label: 'Amount (RM)', type: 'number', mode: 'decimal', required: true, value: e?.amount, ph: '0.00', half: true },
+      { key: 'spent_on', label: 'Date', type: 'date', required: true, value: e?.spent_on || today() },
+      { type: 'note', label: isNew ? 'After saving, add a photo of the receipt on the next page.' : 'Keep the receipt photo on this expense; it goes with the claim.' }
+    ], async (v) => {
+      if (!(v.amount > 0)) throw new Error('Amount must be more than RM 0.');
+      const row = { type: v.type, what: v.what, amount: Math.round(v.amount * 100) / 100, spent_on: v.spent_on, paid_from_pool: v.who === 'pool', member_id: v.who === 'pool' ? null : v.who };
+      let ref = e?.ref;
+      if (isNew) {
+        let tries = 0, res;
+        do {
+          ref = nextRef('EX-', D.expenses.concat(tries ? [{ ref }] : []));
+          res = await sb.from('expenses').insert({ ...row, plantation_id: D.plantation.id, ref }).select('id').single();
+          tries++;
+        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
+        if (res.error) throw res.error;
+      } else {
+        const { error } = await sb.from('expenses').update(row).eq('id', e.id);
+        if (error) throw error;
+      }
+      await refresh(isNew ? `${ref} saved` : 'Saved');
+      if (isNew) location.hash = '#ex-' + ref;
+    }, isNew ? 'Save expense' : 'Save changes');
+  }
+
+  // ---------- claims ----------
+  function claimForm(exps) {
+    if (!exps.length) return;
+    const mid = exps[0].member_id;
+    const total = exps.reduce((s, e) => s + Number(e.amount), 0);
+    const pv = D.priv[mid];
+    const noReceipt = exps.filter((e) => !exHasReceipt(e)).length;
+    openSheet(`Claim · ${memberName(mid)}`, [
+      { type: 'info', node: h('div', { class: 'pay-items' }, exps.map((e) => h('div', { class: 'pi' }, h('span', {}, `${dstr(e.spent_on)} · ${e.what || e.type}`), h('b', {}, rm(e.amount)))),
+        h('div', { class: 'pi total' }, h('span', {}, `Total to claim (${exps.length} item${exps.length > 1 ? 's' : ''})`), h('b', {}, rm(total)))) },
+      { type: 'info', node: h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Pay to'), h('div', { class: 'v' }, pv && pv.account_no ? `${pv.bank_name || 'Bank'} · ${mask(pv.account_no)}` : 'No bank details yet (add them on the Partners page)')) },
+      { key: 'note', label: 'Note to partners (optional)', value: '', ph: 'e.g. November trips to the farm' },
+      { type: 'note', label: noReceipt ? `${noReceipt === exps.length ? (exps.length > 1 ? 'None of these expenses has a' : 'This expense has no') : noReceipt + ' of these ' + exps.length + ' expenses ' + (noReceipt > 1 ? 'have' : 'has') + ' no'} receipt photo yet. You can still claim, and add the photo on the expense later.` : 'The receipts attached to each expense go with the claim. Another partner marks it paid.' }
+    ], async (v) => {
+      const { data, error } = await sb.rpc('create_claim', { p_expense_ids: exps.map((e) => e.id), p_note: v.note });
+      if (error) throw error;
+      await refresh('Claim submitted');
+      const c = D.claims.find((x) => x.id === data);
+      if (c) location.hash = '#cl-' + c.ref;
+    }, 'Submit claim');
+  }
+
+  PAGES.cl = (root, ref) => {
+    const c = D.claims.find((x) => x.ref === ref);
+    if (!c) { location.hash = '#exp'; return; }
+    const exps = D.ce.filter((x) => x.claim_id === c.id).map((x) => D.expenses.find((e) => e.id === x.expense_id)).filter(Boolean);
+    const paid = c.status === 'Paid';
+    const mine = c.member_id === D.me.id;
+    const pv = D.priv[c.member_id];
+    setHead(`Claim ${c.ref}`, `${memberName(c.member_id)} · ${rm(c.amount)} · ${paid ? 'Paid' : 'Claimed, unpaid'}`, ['Expense', '#exp-m-' + c.member_id]);
+    root.append(h('div', { class: 'card kvs' },
+      kv('Claimed by', memberName(c.member_id)), kv('Amount', rm(c.amount)), kv('Submitted', dstr(c.submitted_on)), kv('Status', paid ? 'Paid' : 'Claimed, unpaid'),
+      paid ? kv('Paid on', dstr(c.paid_on)) : null, paid ? kv('Paid by', memberName(c.paid_by)) : null,
+      pv && pv.account_no ? kv('Pay to', `${pv.bank_name || 'Bank'} · ${pv.account_holder || ''} · ${pv.account_no}`, true) : null,
+      c.note ? kv('Note', c.note, true) : null));
+    root.append(sec('Expenses in this claim'));
+    root.append(card(exps.map((e) => linkRow('#ex-' + e.ref, e.what || e.type, `${dstr(e.spent_on)} · ${e.type}${exHasReceipt(e) ? ' · receipt ✓' : ' · no receipt yet'}`, rm(e.amount))),
+      h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(c.amount)))));
+    if (!paid && !mine) root.append(h('button', { class: 'btn primary', type: 'button', onclick: () => openSheet(`Mark ${c.ref} paid`, [
+      { type: 'info', node: h('div', { class: 'pay-items' }, h('div', { class: 'pi total' }, h('span', {}, `Pay ${memberName(c.member_id)}`), h('b', {}, rm(c.amount)))) },
+      { key: 'paid_on', label: 'Paid on', type: 'date', required: true, value: today() },
+      { key: 'note', label: 'Note (optional)', value: c.note, ph: 'e.g. transfer ref 123456' },
+      { type: 'note', label: 'You are recorded as the partner who paid this claim. Add the transfer slip on the claim page.' }
+    ], async (v) => {
+      const { error } = await sb.from('claims').update({ status: 'Paid', paid_on: v.paid_on, note: v.note }).eq('id', c.id);
+      if (error) throw error;
+      await refresh('Claim marked paid');
+    }, 'Mark paid') }, `Mark paid · ${rm(c.amount)}`));
+    if (!paid && mine) root.append(h('p', { class: 'muted small foot' }, 'Another partner marks your claim paid when they transfer the money to you.'));
+    root.append(attachBox('claim', c.id, 'Transfer slip'));
+    if (!paid && (mine || D.isAdmin)) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Withdraw ${c.ref}?`, [{ type: 'note', label: 'The claim is removed and its expenses become "Not claimed" again, so they can be changed or claimed again.' }], async () => {
+      const { error } = await sb.rpc('withdraw_claim', { p_claim: c.id });
+      if (error) throw error;
+      location.hash = '#exp-m-' + c.member_id; await refresh('Claim withdrawn');
+    }, 'Withdraw claim', true) }, 'Withdraw this claim'));
+    if (paid && D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Mark ${c.ref} unpaid?`, [{ type: 'note', label: 'Use this only if the claim was marked paid by mistake.' }], async () => {
+      const { error } = await sb.rpc('reopen_claim', { p_claim: c.id });
+      if (error) throw error;
+      await refresh('Claim is unpaid again');
+    }, 'Mark unpaid', true) }, 'Mark as not paid'));
+  };
+
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
-  PAGES.exp = later('Expense', 'Stage 4', 'Partners record what they paid from their own pocket (transport, meals and other costs) and claim it back.');
   PAGES.finance = later('Finance', 'Stage 5', 'Capital pool, purchases, where the money went, and profit shares.');
   PAGES.map = later('Map', 'Later stage', 'The plantation sketch with blok, peringkat and marks for issues, fences and water.');
   PAGES.reports = later('Reports', 'Stage 6', 'Excel and PDF reports saved for all partners, kept for 12 months.');

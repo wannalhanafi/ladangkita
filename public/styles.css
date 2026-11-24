@@ -217,3 +217,6 @@ input.code{font-family:'Space Grotesk',monospace;font-size:28px;letter-spacing:6
 .grades .t{font-weight:700;border-bottom:0}
 .sales-top{display:flex;flex-direction:column;gap:2px}
 .sales-top .big{font-size:24px;font-weight:600}
+.quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.quick .btn{font-size:15px;min-height:48px;padding:8px}
+.srow.ghead .num{white-space:normal;line-height:1.25}
