@@ -1,0 +1,84 @@
+# LadangKita (Kebun Nenas) – handover for a new chat
+
+Paste this into the new chat. The SQL files and the Edge Function are in this project under ladangkita/supabase/ (and in the GitHub repo).
+
+## Who and what
+- I am WanZ (Malaysia). Claude is the developer; I am the product owner and tester. Explain technical terms in plain language and give me one step at a time.
+- App: **LadangKita**, a pineapple plantation operations app. Free tester: one plantation (Kebun Nenas), 3 partners who pool capital, all field work contracted out. Later sold to the public.
+- Platform decisions: installable web app opened by link (home-screen icon), phone-first, plus a partners' web dashboard for laptops. Recording must work **offline** at the farm and sync later.
+
+## Links
+- **Live app: https://ladangkita.pages.dev** (Cloudflare Pages)
+- Code: private GitHub repo **wannalhanafi/ladangkita** (branch `main`). Every push to main goes live on Cloudflare within about a minute.
+- Clickable mockup (source of truth for screens and wording): https://claude.ai/artifact/7Ujfo4fjEDByy6aHM9AM35 (a Design canvas; screens are in project/Main.dc.html and project/Partners.dc.html)
+- Specification document: https://claude.ai/artifact/AMymzLaMp3i38XgG7Dgv9f
+- Data workbook from the planter's file: LadangKita_Data-Kronologi.xlsx
+
+## How the app is built (keep it this way unless decided otherwise)
+- Plain HTML/CSS/JS, no build step. Website files in `public/` (index.html, app.js, config.js, styles.css, sw.js, manifest, icons, `_headers`, vendor/: supabase.js = supabase-js 2.119.2, write-excel-file.min.js 4.1.1, jspdf.umd.min.js 4.2.1, jspdf.plugin.autotable.min.js 5.0.9 – the last three load only when exporting). Database migrations in `supabase/`, Edge Function in `supabase/functions/notify-alert/index.ts` (not published to the website).
+- app.js: one file; a small `h()` helper builds the page safely (text never becomes markup); pages live in `PAGES.<name>` and are chosen by the address hash: #status, #p-3, #partners, #partner-<id>, #agencies, #agency-<id>, #grant-GR-001, #mat-BT-01, #settings, #settings-<profile|currency|crop|cats|parties|notif|storage|lang>, #jobs, #jobs-c-<contractorId>, #jobs-none, #job-J-001, #pay-PV-001, #sales, #sales-b-<buyerId>, #pick-HP-001, #rc-RC-001, #exp, #exp-m-<memberId>, #exp-pool, #ex-EX-001, #cl-CL-001, #finance, #buy-PB-001, #alerts, #alert-AL-001, #reports, #dashboard, #home, #map, #mark-<uuid>; every page is built. `loadAll()` reads the whole plantation once after sign-in (then re-applies any unsynced outbox changes and saves the copy); `refresh()` re-reads after a save. Forms open as a bottom sheet via `openSheet(title, fields, onSave, saveLabel, danger, offlineOk)`. `today()` = phone's local date (never toISOString, which is UTC). `money()` computes pool, costs by category, sales, profit, cash left.
+- **Currency and dates:** `CUR()` = symbol of plantations.currency (MYR→RM, SGD, BND, IDR, THB, PHP, USD); `rm()` uses it; `cx()` swaps "RM" in form labels and export column headers. `dstr()` follows the date format chosen per phone (localStorage `lk_datefmt`: 25 Nov 2026 / 25/11/2026 / 2026-11-25). English only; a Bahasa Melayu version is not built (asked WanZ whether partners need it).
+- **Offline (Stage 7a):** `sw.js` keeps the app files on the phone (network first, saved copy when offline; fonts cached; cache name now `lk-app-v6` – bump it on every release). After every successful load the whole plantation is saved to localStorage (`lk_snap_<userId>`); offline start shows that copy. Field saves go through `commit(ops, msg, opts)`: ops = [{op: insert|update|delete|upload, table, rows|values, eq, in, refPrefix, path, blob}]; with signal they run straight away, without signal they go to an IndexedDB outbox (`ladangkita`/`outbox`) and are applied to the copy in memory; `flushOutbox()` sends them when back online (online event, app start, every 30 s); IDs made on the phone (uuid); a ref clash takes the next free number; refused changes are listed to Try again or Discard. offlineOk forms: jobs (new/edit/steps), harvest picks, expenses, alerts + actions/close, peringkat details, map marks (add/edit/delete), photos. Money/settings tasks need signal and say so.
+- **Notifications (Stage 7b + Settings):** table `push_subscriptions` (each partner only sees/edits their own phones); table `app_secrets` (RLS on, no policies, no grants – only the Edge Function and database use it: `hook_token`, `vapid_public`, `vapid_private`; the VAPID key pair was created by the function on first use and has never left Supabase). Edge Function `notify-alert` v2 (verify_jwt = false, checks the token itself): `{action:'key'}` → public key; `{action:'test'}` + user login → test to own phones; `{alert_id}` + token (trigger `alerts_notify`) → other active partners; `{claim_id}` + token (trigger `claims_notify`) → other partners; `{action:'daily', today?, dry?}` + token → reminders. pg_cron job `lk-daily-reminders` at 00:05 UTC (08:05 Malaysia) calls `lk_daily_ping()`. Daily reminders: jobs due N days before (partner's choice 1/3/7) and late (day after, then weekly), claims unpaid weekly, buyer unpaid N days after pick then weekly, rent N days before `plantations.rent_due_on` (rolled forward by Month/Year after it passes), lease N days before end, Monday summary. Each partner's choices in `members.notify` jsonb (missing key = on; `<key>_days` for timing). Dry run on 2026-11-30 tested: weekly summary prepared for 1 partner, 0 phones. sw.js shows the notification and opens its page on tap. App: Settings → Notifications (this phone's switch + per-type switches); Home reminder until on. iPhone must open LadangKita from the Home Screen icon (iOS 16.4+). Real delivery to a phone not yet tested.
+- **Partners' dashboard (Stage 7c):** `PAGES.dashboard`. On screens 1000 px or wider the bottom bar becomes a left sidebar (Dashboard, Home, Status … Finance) and opening the app shows the Dashboard; on phones it is in the ☰ menu. Sections: Download full report + Add capital top-up (admin; adds to members.capital), urgent alerts, 6 KPI tiles, Peringkat cost/sales/profit table (`perBatch()`), Harvest outlook (`outlook()`, from `crop_templates`), Needs attention, Partner statement, Recent activity.
+- **Map (Stage 7d):** `PAGES.map` draws a sketch, not to scale, from the data: blok side by side (width by est_acres), drains between, road at the bottom. Peringkat stacked from the back by `batch_blocks.map_order` (Blok 2: P7, P6, P4); height = area share. Colour by planting date or variety. Marks (`map_marks`, x/y 0–1, optional GPS) with own page, photos, edit, delete (creator or admin); "Arrange" per blok. The pond is a Water mark "Kolam (pond)".
+- **Settings:** list page → sub-pages. Profile (+ logo upload to `files/<pid>/logo/…`, `plantations.logo_path`; next rent due date), Currency (admin), Crop calendar (variety tabs; months to hormon, hormon to harvest, fruit per acre; tasks [{name, month}] in `crop_templates.tasks`; rename also renames batches.variety; delete only if unused; peringkat page shows "Crop calendar · variety" with dated tasks via `cropTasksCard()`), Cost categories (add; admin removes if unused by jobs/purchases), Contractors and buyers (add/edit incl. work types / buyer types), Notifications, Storage and backup (usage from attachments/reports bytes; photo size; keep reports 6/12/24 months; download all data), Language and dates.
+- **Agencies:** `PAGES.agencies` lists agencies (+ Add), grants (+ Record grant or aid, Excel/PDF `SPEC.grants`) and planting material (+ Record). Agency page `#agency-<id>`: contact (tap to call/email), requirement checklist (`agency_requirements`, tick/add/remove), its grants, documents (`attachBox('agency')`), admin delete if no grants. Grant page `#grant-GR-xxx`: status steps Applied → Approved → Received → Planted → Completed (tap to set), details, deliveries, documents (`attachBox('grant')`). Material page `#mat-BT-xx`: delivery details, where it went (`material_uses`: peringkat, Planting/Sulam, qty, cannot exceed the delivery), photos (`attachBox('material')`). Material refs BT- with 2 digits (existing BT-01…).
+- Money pattern used three times (Jobs, Sales, Expense): list page with summary by person + Total row → person view with tick boxes → one database function records the payment/claim and links → detail page with attachments and admin cancel. Paid/claimed items are locked by database triggers. Refs: J-, PV-, HP-, RC-, EX-, CL-, PB-, AL-, GR- with 3 digits.
+- Costs counted in Finance: purchases with a price + jobs that are Done/To pay/Paid with a price + all partner expenses. Cash left = capital + money received from buyers − contractor payments − purchases − paid claims − expenses paid from the pool.
+- Reports: `SPEC.<name>()` table specs; `xpBtn(spec, title)` puts "Excel / PDF" on a section; saved reports in `files/<plantation_id>/reports/...` + `reports` table, kept per Settings (default 12 months); full plantation report = 17 tables.
+- Photos/receipts: `attachBox(entity, id)`; private bucket `files` at `<plantation_id>/<entity>/<id>/<uuid>.jpg|pdf`, shrunk on the phone first (Settings photo size).
+- Alert page: back link goes to Home; bottom buttons "Done · back to Home" and "All alerts" (WanZ found no way out after reporting).
+- Testing without the internet: in the chat workspace a stand-in for the Supabase library serves a copy of the real data; Playwright scripts test_pages, test_jobs, test_sales, test_exp, test_fin, test_rep, test_off, test_push, test_dash, test_map, test_set, test_ag (phone size, dashboard/map also laptop). The stand-in shares objects with the app, so set values explicitly rather than toggling after a save. Database changes are tried in a rolled-back transaction first; the Edge Function is tested from the database with net.http_post and net._http_response. The chat workspace cannot reach ladangkita.pages.dev directly – check the live site with WebFetch (CACHE name in sw.js, add ?v=N to skip WebFetch's 15-minute cache).
+- Cloudflare Pages settings: framework preset None, build command empty, build output directory `public`, production branch `main`.
+- Claude pushes to GitHub from the chat (Claude GitHub App has access to ladangkita; repo must be attached in the session with push access).
+- Look follows the mockup: green #1F4D3A, gold #E8B84A, ground #F6F5EF, Space Grotesk headings + Inter text, pineapple logo.
+
+## Supabase (set up 24 Nov 2026)
+- Organisation **Wannal**, Pro plan (paid, invoice YBDASH-00001, US$27). Spend cap on.
+- Project **ladangkita**, ref `qrxmeuutobncpwgdvtgo`, URL `https://qrxmeuutobncpwgdvtgo.supabase.co`, region Singapore (ap-southeast-1), Postgres 17, database time zone Asia/Kuala_Lumpur.
+- Publishable (anon) key: `sb_publishable_y5HDaAXZNckU9zDa5sNueA_CQOiPfxs` (safe inside the app; never share the secret / service_role key)
+- **Supabase connector is connected** (signed in via GitHub). Claude applies SQL and deploys Edge Functions through it (WanZ approves when Supabase asks; the approval question times out after 2 minutes if not answered – then wait for WanZ to say go); the chat's own workspace cannot reach supabase.co.
+- Auth: email sign-in code, **8 digits** (config.js `codeLength: 8`). Email templates show `{{ .Token }}`. Site URL https://ladangkita.pages.dev. Built-in Supabase email sender: only a few emails per hour – set up custom SMTP before partners join (also needed for the weekly backup email, not built yet).
+- Migrations applied: 01_schema, 02_security, 03_seed, 04_tighten_functions, 05_jobs_payments, 06_partner_unlink_and_photos, 07_sales_receipts, 08_expense_claims, 09_timezone, 10_push_notifications, 11_map, 12_settings_reminders (members.notify, plantations.rent_due_on, claims_notify trigger, pg_cron + lk_daily_ping schedule). Edge Function: notify-alert (v2).
+- Security advisor: expected warnings only (helper functions and withdraw_claim callable by signed-in users – they check inside; app_secrets has no policies on purpose). Members may edit their own row (notify), but a trigger stops non-admins changing role, capital or active.
+
+## Status (25 Nov 2026)
+- **Stage 1 done and tested by WanZ on his iPhone.** **Stage 2 Jobs done and tested by WanZ on his phone.** Alerts and photo upload tried by WanZ on his iPhone (alert AL-001 "Fire" in Blok 3 with a photo is in the live data).
+- **Built and live, waiting for WanZ to test:** Stage 3 Sales, 4 Expense, 5 Finance, 6 Reports, 7a Offline, 7b Notifications, 7c Dashboard, 7d Map, Settings (all sections), Agencies (agencies, requirements, grants, material).
+- Real "Save or share", offline on the iPhone and real notification delivery have not yet been tried on a phone. WanZ's phone has no notification subscription yet.
+- Admin partner: WanZ, wannalhanafi@gmail.com, role admin, login linked. **Decision:** other partners are NOT added during the build; WanZ adds them himself from the Partners page. Don't ask for partner details again.
+
+## Next steps
+1. WanZ keeps testing on his iPhone and reports gaps (like the alert-page exit and the Agencies page).
+2. Ask WanZ whether a Bahasa Melayu version is needed.
+3. WanZ checks the Map sketch against the real field (Arrange; pond position).
+4. Before partners join: custom email sender for sign-in codes (and weekly backup email).
+
+## Still needed (later, not blocking the build)
+- From the planter (enter in the app when they arrive): confirm P4 split; work done since 26 May 2026 (incl. racun rumput); prices of the 5 purchases; who did each job and the cost; varieties per peringkat; crop calendar months and tasks per variety; land rent, next rent date and lease terms; measured area per peringkat if available.
+- Each partner's capital (Partners page or Dashboard → Add capital top-up).
+
+## Build plan
+1. Setup – done
+2. Jobs and contractor payments – done
+3. Sales – built, in testing
+4. Expense and claims – built, in testing
+5. Home alerts, money chart, Finance – built, in testing
+6. Reports – built, in testing
+7. a) Offline; b) notifications; c) dashboard; d) Map – built, in testing
+Plus Settings (all mockup sections) and Agencies data entry – built, in testing.
+
+## Key design decisions (all in the mockup and spec)
+- Brand LadangKita, logo top-left = Home; ☰ menu: Partners · Agencies · Settings · Dashboard · Reports; bottom bar (left sidebar on laptops, plus Dashboard and Home): Status · Map · Jobs · Sales · Expense · Finance.
+- Structure: one lot → 4 blok (split by drains, pond in Blok 2) → 10 peringkat (planting batches). Plants counted, not acres; est. area per peringkat from plant count, replaceable by measured area.
+- Money pages share one pattern: summary table by person with Total row → person page with tick boxes → pay / claim / receive form → linked records, Excel/PDF on every table.
+- Jobs can cover several peringkat; "Upah Lain-lain" requires a description; past jobs can be completed later.
+- Grade prices are typed per harvest pick. Partners pay expenses from their own pocket and claim later; another partner marks the claim paid.
+- Profit is shared by capital paid in, after all costs; landowners get rent only.
+- Urgent alerts: red panel at the top of Home, report → actions → closed; notification to every other partner who turned notifications on.
+- Notifications: each partner chooses their own types and timing; reminders checked every morning at about 8 am.
+- Offline: field records work without signal and sync later; money and settings tasks need signal.
+- Exports saved to the phone and to a shared Reports list.
+- Dashboard shows only real figures; nothing is forecast without a variety and crop calendar.
+- Map is a sketch built from the records (not a satellite map); marks can also carry the phone's GPS position.
