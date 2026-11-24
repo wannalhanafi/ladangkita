@@ -10,6 +10,7 @@
   const $ = (id) => document.getElementById(id);
   const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
   const rm = (n) => 'RM ' + Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dstr = (d) => { if (!d) return ''; const [y, m, day] = String(d).slice(0, 10).split('-').map(Number); return `${day} ${MONTHS[m - 1]} ${y}`; };
   const ageMonths = (d) => { if (!d) return null; const a = new Date(d), b = new Date(); return Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() - (b.getDate() < a.getDate() ? 1 : 0)); };
@@ -147,7 +148,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -160,15 +161,23 @@
       q('material_uses'),
       q('grants').order('ref'),
       q('agencies'),
-      q('alerts', 'id, ref, type, location, urgency, status').neq('status', 'Closed')
+      q('alerts', 'id, ref, type, location, urgency, status').neq('status', 'Closed'),
+      q('cost_categories').order('sort'),
+      q('contractors').order('name'),
+      q('contractor_payments').order('ref'),
+      q('payment_jobs'),
+      q('attachments').order('created_at'),
+      sb.from('settings').select('*').eq('plantation_id', p).maybeSingle()
     ]);
-    const bad = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts].find((r) => r.error);
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings];
+    const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
       user, me, isAdmin: me.role === 'admin', plantation: pl.data,
       members: members.data, priv: Object.fromEntries(priv.data.map((r) => [r.member_id, r])),
       blocks: blocks.data, batches: batches.data, bb: bb.data, jobs: jobs.data, jb: jb.data,
-      receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data
+      receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
+      cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {}
     };
   }
 
@@ -196,7 +205,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || PAGES.home;
-    const tab = TABS[name] || (name === 'p' ? 'status' : '');
+    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -220,37 +229,57 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeSheet(); } });
 
   // ---------- bottom sheet form ----------
-  // fields: {key,label,type:'text'|'email'|'tel'|'number'|'date'|'select'|'textarea'|'head'|'note',value,options,ph,mode,note,required,list}
-  function openSheet(title, fields, onSave, saveLabel = 'Save') {
+  // fields: {key,label,type:'text'|'email'|'tel'|'number'|'date'|'select'|'textarea'|'chips'|'head'|'note'|'info',
+  //          value,options,ph,mode,note,required,list,showIf:(vals)=>bool,node}
+  function openSheet(title, fields, onSave, saveLabel = 'Save', danger = false) {
     const f = $('sheet');
     f.replaceChildren();
     f.append(h('div', { class: 'h sheet-title' }, title));
-    const inputs = {};
+    const inputs = {}, wraps = [];
+    const raw = () => Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.getVal ? el.getVal() : el.value]));
     for (const fd of fields) {
-      if (fd.type === 'head') { f.append(h('div', { class: 'h sheet-head' }, fd.label)); continue; }
-      if (fd.type === 'note') { f.append(h('div', { class: 'note-box' }, fd.label)); continue; }
-      const id = 'f_' + fd.key;
-      let input;
-      if (fd.type === 'select') input = h('select', { id }, fd.options.map((o) => h('option', { value: o[0], selected: String(o[0]) === String(fd.value ?? '') }, o[1])));
-      else if (fd.type === 'textarea') input = h('textarea', { id, rows: 3, placeholder: fd.ph || '' });
-      else input = h('input', { id, type: fd.type || 'text', inputmode: fd.mode, placeholder: fd.ph || '', autocomplete: 'off', list: fd.list ? id + '_l' : null, step: fd.type === 'number' ? 'any' : null });
-      if (fd.type !== 'select') input.value = fd.value ?? '';
-      inputs[fd.key] = input;
-      f.append(h('label', { class: 'field', for: id }, h('span', {}, fd.label, fd.required ? ' *' : ''), input,
-        fd.list ? h('datalist', { id: id + '_l' }, fd.list.map((v) => h('option', { value: v }))) : null,
-        fd.note ? h('small', {}, fd.note) : null));
+      let wrap;
+      if (fd.type === 'head') wrap = h('div', { class: 'h sheet-head' }, fd.label);
+      else if (fd.type === 'note') wrap = h('div', { class: 'note-box' }, fd.label);
+      else if (fd.type === 'info') wrap = fd.node;
+      else {
+        const id = 'f_' + fd.key;
+        let input;
+        if (fd.type === 'chips') {
+          const sel = new Set((fd.value || []).map(String));
+          input = h('div', { class: 'chipsel', id, role: 'group', 'aria-label': fd.label },
+            fd.options.map((o) => h('button', { type: 'button', class: 'chip' + (sel.has(String(o[0])) ? ' on' : ''), 'aria-pressed': String(sel.has(String(o[0]))),
+              onclick: (e) => { const k = String(o[0]); if (sel.has(k)) sel.delete(k); else sel.add(k); e.currentTarget.classList.toggle('on', sel.has(k)); e.currentTarget.setAttribute('aria-pressed', String(sel.has(k))); update(); } }, o[1])));
+          input.getVal = () => [...sel];
+        } else if (fd.type === 'select') input = h('select', { id }, fd.options.map((o) => h('option', { value: o[0], selected: String(o[0]) === String(fd.value ?? '') }, o[1])));
+        else if (fd.type === 'textarea') input = h('textarea', { id, rows: 3, placeholder: fd.ph || '' });
+        else input = h('input', { id, type: fd.type || 'text', inputmode: fd.mode, placeholder: fd.ph || '', autocomplete: 'off', list: fd.list ? id + '_l' : null, step: fd.type === 'number' ? 'any' : null });
+        if (!['select', 'chips'].includes(fd.type)) input.value = fd.value ?? '';
+        inputs[fd.key] = input;
+        wrap = h(fd.type === 'chips' ? 'div' : 'label', { class: 'field', for: fd.type === 'chips' ? null : id }, h('span', {}, fd.label, fd.required ? ' *' : ''), input,
+          fd.list ? h('datalist', { id: id + '_l' }, fd.list.map((v) => h('option', { value: v }))) : null,
+          fd.note ? h('small', {}, fd.note) : null);
+      }
+      if (fd.showIf) wraps.push([fd, wrap]);
+      f.append(wrap);
     }
+    function update() { const r = raw(); for (const [fd, w] of wraps) w.hidden = !fd.showIf(r); }
+    f.oninput = update; f.onchange = update; update();
     const err = h('p', { class: 'err', role: 'alert', hidden: true });
-    const save = h('button', { class: 'btn primary', type: 'submit' }, saveLabel);
+    const save = h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), type: 'submit' }, saveLabel);
     f.append(err, h('div', { class: 'sheet-btns' }, h('button', { class: 'btn ghost', type: 'button', onclick: closeSheet }, 'Cancel'), save));
     f.onsubmit = async (e) => {
       e.preventDefault();
       err.hidden = true;
+      const r = raw();
       const vals = {};
       for (const fd of fields) {
-        if (!inputs[fd.key]) continue;
-        let v = inputs[fd.key].value.trim();
-        if (fd.required && !v) { err.textContent = `Please fill in ${fd.label}.`; err.hidden = false; inputs[fd.key].focus(); return; }
+        const el = inputs[fd.key];
+        if (!el) continue;
+        if (fd.showIf && !fd.showIf(r)) { vals[fd.key] = null; continue; }
+        let v = el.getVal ? el.getVal() : el.value.trim();
+        const empty = Array.isArray(v) ? !v.length : !v;
+        if (fd.required && empty) { err.textContent = `Please fill in ${fd.label}.`; err.hidden = false; if (el.focus) el.focus(); return; }
         if (fd.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { err.textContent = 'Please type a full email address.'; err.hidden = false; return; }
         if (fd.type === 'number') { if (v === '') v = null; else { v = Number(v.replace(/,/g, '')); if (!isFinite(v) || v < 0) { err.textContent = `${fd.label} must be a number.`; err.hidden = false; return; } } }
         else if (v === '') v = null;
@@ -262,9 +291,10 @@
       finally { busy(save, false, saveLabel); }
     };
     $('sheet-wrap').hidden = false;
+    $('sheet').scrollTop = 0;
     document.body.classList.add('sheet-open');
     const first = Object.values(inputs)[0];
-    if (first && matchMedia('(min-width: 700px)').matches) first.focus();
+    if (first && first.focus && matchMedia('(min-width: 700px)').matches) first.focus();
   }
   function closeSheet() { $('sheet-wrap').hidden = true; document.body.classList.remove('sheet-open'); }
   $('sheet-wrap').querySelector('.sheet-scrim').addEventListener('click', closeSheet);
@@ -292,19 +322,23 @@
         h('div', {}, h('div', { class: 'h' }, 'No alert'), h('small', {}, 'All clear on the plantation'))));
     }
     const plants = D.batches.reduce((s, b) => s + b.plants, 0);
-    const toEnter = D.jobs.filter((j) => j.price == null && j.status !== 'Planned').length + 0;
+    const toEnter = D.jobs.filter((j) => DONE.includes(j.status) && (j.price == null || !j.contractor_id)).length;
+    const toPay = D.jobs.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0);
     root.append(h('div', { class: 'kpis' },
       kpi('Plants', fmt(plants), `${D.batches.length} peringkat`, '#status'),
       kpi('Area', `${Number(D.plantation.area_acres || 0).toFixed(2)} ac`, `${D.blocks.length} blok`, '#status'),
       kpi('Partners', fmt(D.members.filter((m) => m.active).length), D.isAdmin ? 'Tap to add' : 'In this plantation', '#partners'),
-      kpi('Jobs recorded', fmt(D.jobs.length), toEnter ? `${toEnter} need contractor and cost` : 'All costs entered', '#status')));
+      toPay ? kpi('To pay contractors', rm(toPay), `${D.jobs.filter((j) => j.status === 'To pay').length} jobs done`, '#jobs')
+        : kpi('Jobs', fmt(D.jobs.length), toEnter ? `${toEnter} need contractor and cost` : 'All costs entered', toEnter ? '#jobs-none' : '#jobs')));
     const upcoming = D.jobs.filter((j) => ['Planned', 'Quoted', 'In progress'].includes(j.status));
     root.append(sec('Coming up'));
     root.append(card(upcoming.length ? upcoming.map((j) => {
       const names = D.jb.filter((x) => x.job_id === j.id).map((x) => D.batches.find((b) => b.id === x.batch_id)).filter(Boolean).map((b) => 'P' + b.no);
-      return h('div', { class: 'trow' }, h('span', { class: 'dot gold' }), h('span', { class: 'lmain' }, h('b', {}, j.category), h('small', {}, `${j.start_on ? dstr(j.start_on) : j.date_note || 'Date to set'} · ${names.join(', ')}${j.note ? ' · ' + j.note : ''}`)), pill(j.status, 'gold'));
+      return h('a', { class: 'trow', href: '#job-' + j.ref }, h('span', { class: 'dot gold' }), h('span', { class: 'lmain' }, h('b', {}, jobName(j)), h('small', {}, `${jobDate(j)} · ${names.join(', ')}${jobWho(j) ? ' · ' + jobWho(j) : ''}${j.note ? ' · ' + j.note : ''}`)), pill(j.status, 'gold'));
     }) : h('p', { class: 'muted' }, 'Nothing planned yet.')));
-    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Jobs, Sales, Expense, Finance and Map are coming next, in that order. Everything you see here is your real plantation data.')));
+    root.append(h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs and contractor payments'));
+    if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
+    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Sales, Expense, Finance and Map are coming next. Everything you see here is your real plantation data.')));
   };
   const kpi = (l, v, sub, href) => h('a', { class: 'kpi', href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), sub ? h('div', { class: 's' }, sub) : null);
 
@@ -373,12 +407,12 @@
     root.append(sec('Work done and next steps'));
     root.append(card(i.jobs.length ? i.jobs.map((j) => {
       const done = ['Done', 'To pay', 'Paid'].includes(j.status);
-      return h('div', { class: 'trow' },
+      return h('a', { class: 'trow', href: '#job-' + j.ref },
         h('span', { class: 'mark ' + (done ? 'done' : 'todo') }, done ? '✓' : '○'),
-        h('span', { class: 'lmain' }, h('b', {}, j.category), h('small', {}, `${j.ref} · ${j.start_on ? dstr(j.start_on) : j.date_note || 'Date to set'}${j.products ? ' · ' + j.products : ''}${j.method ? ' · ' + j.method : ''}`)),
-        h('span', { class: 'lright' }, j.price != null ? rm(j.price) : done ? pill('Cost to enter', 'amber') : pill(j.status, 'gold')));
+        h('span', { class: 'lmain' }, h('b', {}, jobName(j)), h('small', {}, `${j.ref} · ${jobDate(j)}${jobWho(j) ? ' · ' + jobWho(j) : ''}${j.products ? ' · ' + j.products : ''}`)),
+        h('span', { class: 'lright' }, j.price != null ? h('span', {}, rm(j.price), h('small', { class: 'st' }, j.status)) : done ? pill('Cost to enter', 'amber') : pill(j.status, 'gold')));
     }) : h('p', { class: 'muted' }, 'No work recorded yet.')));
-    root.append(h('p', { class: 'muted small foot' }, 'Recording new jobs, contractors and costs comes in the next stage (Jobs).'));
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => jobForm(null, { batches: [b.id] }) }, '+ Record a job for this peringkat'));
   };
 
   function editBatch(b) {
@@ -457,7 +491,7 @@
     if (D.isAdmin) {
       fields.push(
         { key: 'capital', label: 'Capital paid in (RM)', type: 'number', mode: 'decimal', value: m?.capital ?? '' , ph: '0.00' },
-        { key: 'joined_on', label: 'Joined on', type: 'date', value: m?.joined_on || (isNew ? new Date().toISOString().slice(0, 10) : '') },
+        { key: 'joined_on', label: 'Joined on', type: 'date', value: m?.joined_on || (isNew ? today() : '') },
         { key: 'role', label: 'Role', type: 'select', value: m?.role || 'partner', options: [['partner', 'Partner'], ['admin', 'Admin partner (can add partners, change capital)']] });
       if (!isNew && !self) fields.push({ key: 'active', label: 'Status', type: 'select', value: String(m.active), options: [['true', 'Active'], ['false', 'Inactive (left the partnership)']] });
     }
@@ -567,12 +601,326 @@
     });
   }
 
+  // ================= JOBS AND CONTRACTOR PAYMENTS (Stage 2) =================
+  const OPEN = ['Planned', 'Quoted', 'In progress'];
+  const DONE = ['Done', 'To pay', 'Paid'];
+  const statusKind = (st) => ({ Planned: 'gold', Quoted: 'gold', 'In progress': 'gold', Done: 'amber', 'To pay': 'amber', Paid: 'green' })[st] || '';
+  const statusLabel = (j) => (j.status === 'Done' && j.price == null ? 'Done · cost to enter' : j.status);
+  const jobName = (j) => (j.category === 'Upah Lain-lain' && j.other_note ? 'Upah Lain-lain: ' + j.other_note : j.category);
+  const jobBatches = (j) => D.jb.filter((x) => x.job_id === j.id).map((x) => D.batches.find((b) => b.id === x.batch_id)).filter(Boolean).sort((a, b) => a.no - b.no);
+  const jobPlots = (j) => { const bs = jobBatches(j); return bs.length ? bs.map((b) => 'P' + b.no).join(', ') : 'No peringkat'; };
+  const jobPay = (j) => { const l = D.pj.find((x) => x.job_id === j.id); return l ? D.pays.find((p) => p.id === l.payment_id) : null; };
+  const jobWho = (j) => D.contractors.find((c) => c.id === j.contractor_id)?.name || j.contractor_name || null;
+  const jobDate = (j) => (j.start_on ? dstr(j.start_on) : j.date_note || 'Date to set');
+  const sortJobs = (list) => [...list].sort((a, b) => String(b.start_on || '9999').localeCompare(String(a.start_on || '9999')) || b.ref.localeCompare(a.ref));
+  const nextRef = (prefix, list) => prefix + String(list.reduce((m, x) => Math.max(m, parseInt(String(x.ref).replace(/\D/g, ''), 10) || 0), 0) + 1).padStart(3, '0');
+
+  PAGES.jobs = (root, arg) => {
+    const cid = arg && arg.startsWith('c-') ? arg.slice(2) : null;
+    const none = arg === 'none';
+    const contractor = cid ? D.contractors.find((c) => c.id === cid) : null;
+    if (cid && !contractor) { location.hash = '#jobs'; return; }
+    const list = sortJobs(D.jobs.filter((j) => (cid ? j.contractor_id === cid : none ? !j.contractor_id : true)));
+    if (contractor) setHead(contractor.name, 'Contractor · jobs and payments', ['All contractors', '#jobs']);
+    else if (none) setHead('Contractor not entered', 'Jobs still missing a contractor', ['All contractors', '#jobs']);
+    else setHead('Jobs', 'Work by contractors, and paying them');
+
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => jobForm(null, { contractor: contractor?.name }) }, '+ New job'));
+
+    if (!cid && !none) {
+      const groups = D.contractors.map((c) => ({ name: c.name, href: '#jobs-c-' + c.id, jobs: D.jobs.filter((j) => j.contractor_id === c.id) }));
+      const unassigned = D.jobs.filter((j) => !j.contractor_id);
+      if (unassigned.length) groups.push({ name: 'Contractor not entered', href: '#jobs-none', jobs: unassigned, muted: true });
+      const sum = (js) => ({ open: js.filter((j) => OPEN.includes(j.status)).length, toPay: js.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0), paid: js.filter((j) => j.status === 'Paid').reduce((s, j) => s + Number(j.price || 0), 0) });
+      const tot = sum(D.jobs);
+      root.append(sec('Summary by contractor'));
+      root.append(h('div', { class: 'card table' },
+        h('div', { class: 'srow ghead' }, h('span', {}, 'Contractor'), h('span', { class: 'num' }, 'Open'), h('span', { class: 'num' }, 'Done, to pay'), h('span', { class: 'num' }, 'Paid')),
+        groups.length ? groups.map((g) => { const x = sum(g.jobs); return h('a', { class: 'srow', href: g.href }, h('span', { class: g.muted ? 'lk muted-l' : 'lk' }, g.name), h('span', { class: 'num' }, x.open || '—'), h('span', { class: 'num red-t' }, x.toPay ? rm(x.toPay) : '—'), h('span', { class: 'num green-t' }, x.paid ? rm(x.paid) : '—')); }) : h('p', { class: 'muted' }, 'No contractors yet.'),
+        h('div', { class: 'srow total' }, h('span', {}, 'Total'), h('span', { class: 'num' }, tot.open), h('span', { class: 'num red-t' }, rm(tot.toPay)), h('span', { class: 'num green-t' }, rm(tot.paid)))));
+      if (tot.toPay > 0) root.append(h('p', { class: 'muted small foot' }, 'To pay a contractor, tap their name above, tick the jobs, then tap Pay.'));
+    }
+
+    if (contractor) {
+      const js = D.jobs.filter((j) => j.contractor_id === cid);
+      root.append(h('div', { class: 'tiles' },
+        h('div', { class: 'tile' }, h('small', {}, 'Open'), h('div', { class: 'h' }, js.filter((j) => OPEN.includes(j.status)).length)),
+        h('div', { class: 'tile' }, h('small', {}, 'Done, to pay'), h('div', { class: 'h' }, rm(js.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0)))),
+        h('div', { class: 'tile' }, h('small', {}, 'Paid'), h('div', { class: 'h' }, rm(js.filter((j) => j.status === 'Paid').reduce((s, j) => s + Number(j.price || 0), 0))))));
+      root.append(h('div', { class: 'card kvs' }, kv('Phone', contractor.phone), kv('SSM / IC', contractor.ssm_or_ic), kv('Bank', contractor.bank_name), kv('Account number', contractor.account_no), kv('Usual rates', contractor.usual_rates, true), contractor.address ? kv('Address', contractor.address, true) : null,
+        h('div', { class: 'kv wide' }, h('button', { class: 'btn small-btn', type: 'button', onclick: () => contractorForm(contractor) }, 'Edit contractor details'))));
+    }
+    if (none) root.append(h('div', { class: 'card note' }, h('p', {}, 'These jobs came from the planter\'s records. Open each one and tap ', h('strong', {}, 'Edit / complete this record'), ' to add the contractor and the price.')));
+
+    // jobs list, with tick boxes when one contractor is shown
+    const sel = new Set();
+    const payable = (j) => contractor && j.status === 'To pay' && j.price != null && !jobPay(j);
+    const payBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => payForm(list.filter((j) => sel.has(j.id))) }, 'Tick jobs to pay');
+    const drawPay = () => { const t = list.filter((j) => sel.has(j.id)).reduce((s, j) => s + Number(j.price || 0), 0); payBtn.disabled = !sel.size; payBtn.textContent = sel.size ? `Pay ${contractor.name} · ${sel.size} job${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick jobs to pay'; };
+    root.append(sec(cid || none ? 'Jobs' : 'All jobs'));
+    root.append(h('div', { class: 'card table' },
+      h('div', { class: 'jrow ghead' + (contractor ? ' sel' : '') }, contractor ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Job'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      list.length ? list.map((j) => {
+        const pv = jobPay(j);
+        const box = payable(j) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + j.ref, onchange: (e) => { if (e.target.checked) sel.add(j.id); else sel.delete(j.id); drawPay(); } }) : null;
+        return h('div', { class: 'jrow' + (contractor ? ' sel' : '') }, contractor ? h('span', { class: 'cb' }, box) : null,
+          h('span', { class: 'd' }, j.start_on ? dstr(j.start_on).replace(/ \d{4}$/, '') : '—', j.start_on ? h('small', {}, j.start_on.slice(0, 4)) : null),
+          h('span', {}, h('a', { href: '#job-' + j.ref }, jobName(j)), h('small', {}, `${j.ref} · ${jobPlots(j)}${!contractor ? ' · ' + (jobWho(j) || 'contractor to enter') : ''}`)),
+          h('span', { class: 'num' }, j.price != null ? Number(j.price).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'),
+          h('span', {}, pill(statusLabel(j), statusKind(j.status)), pv ? h('a', { class: 'pv', href: '#pay-' + pv.ref }, pv.ref) : null));
+      }) : h('p', { class: 'muted' }, 'No jobs yet.')));
+    if (contractor && list.some(payable)) root.append(h('div', { class: 'pay-bar' }, payBtn));
+
+    const pays = D.pays.filter((p) => (cid ? p.contractor_id === cid : !none)).sort((a, b) => b.ref.localeCompare(a.ref));
+    if (!none) {
+      root.append(sec('Payments to contractors'));
+      root.append(card(pays.length ? pays.map((p) => linkRow('#pay-' + p.ref, `${p.ref} · ${rm(p.amount)}`, `${p.contractor_name || ''} · ${dstr(p.paid_on)} · ${p.method} · ${p.paid_by}`, pill('Paid', 'green'))) : h('p', { class: 'muted' }, 'No payments yet.')));
+    }
+  };
+
+  // ---------- one job ----------
+  PAGES.job = (root, ref) => {
+    const j = D.jobs.find((x) => x.ref === ref);
+    if (!j) { location.hash = '#jobs'; return; }
+    const pv = jobPay(j);
+    const who = jobWho(j);
+    setHead(`${j.ref} · ${jobName(j)}`, statusLabel(j), ['Jobs', '#jobs']);
+    root.append(h('div', { class: 'card kvs' },
+      kv('Peringkat', jobBatches(j).length ? h('span', { class: 'chips' }, jobBatches(j).map((b) => h('a', { class: 'chip', href: '#p-' + b.no }, 'P' + b.no))) : 'None', true),
+      kv('Contractor', who ? (j.contractor_id ? h('a', { href: '#jobs-c-' + j.contractor_id }, who) : who) : 'Not entered yet'),
+      kv('Date', jobDate(j)),
+      kv('Agreed price', j.price != null ? rm(j.price) : 'Not entered yet'),
+      kv('Status', statusLabel(j)),
+      kv('Products used', j.products), kv('Method', j.method),
+      kv('Payment', pv ? h('a', { href: '#pay-' + pv.ref }, `${pv.ref} · ${dstr(pv.paid_on)}`) : j.status === 'To pay' ? 'Not paid yet' : '—', true),
+      j.note ? kv('Notes', j.note, true) : null));
+
+    const step = { Planned: ['Mark as started', 'In progress'], Quoted: ['Mark as started', 'In progress'], 'In progress': ['Mark as done', 'Done'] }[j.status];
+    if (step) root.append(h('button', { class: 'btn primary', type: 'button', onclick: async (e) => {
+      busy(e.currentTarget, true, 'Saving…');
+      const st = step[1] === 'Done' && j.price != null ? 'To pay' : step[1];
+      const { error } = await sb.from('jobs').update({ status: st, start_on: j.start_on || (st === 'In progress' ? today() : null) }).eq('id', j.id);
+      if (error) { toast(friendly(error)); busy(e.currentTarget, false, step[0]); return; }
+      await refresh(step[1] === 'Done' && j.price == null ? 'Marked done. Enter the price so it can be paid.' : 'Saved');
+    } }, step[0]));
+    if (j.status === 'To pay' && j.contractor_id) root.append(h('a', { class: 'btn primary', href: '#jobs-c-' + j.contractor_id }, `Pay ${who}`));
+    if (j.status !== 'Paid') root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => jobForm(j) }, 'Edit / complete this record'));
+    else root.append(h('p', { class: 'muted small foot' }, 'This job is paid, so its price and contractor are locked. The admin partner can cancel the payment if it was a mistake.'));
+
+    root.append(attachBox('job', j.id));
+
+    if (D.isAdmin && j.status !== 'Paid') root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${j.ref}?`, [{ type: 'note', label: `${jobName(j)} · ${jobDate(j)} will be removed with its photos. This cannot be undone.` }], async () => {
+      const paths = D.atts.filter((a) => a.entity === 'job' && a.entity_id === j.id).map((a) => a.storage_path);
+      if (paths.length) await sb.storage.from('files').remove(paths);
+      await sb.from('attachments').delete().eq('entity', 'job').eq('entity_id', j.id);
+      const { error } = await sb.from('jobs').delete().eq('id', j.id);
+      if (error) throw error;
+      location.hash = '#jobs';
+      await refresh('Job deleted');
+    }, 'Delete job', true) }, 'Delete this job'));
+  };
+
+  // ---------- job form ----------
+  function jobForm(j, preset = {}) {
+    const upah = D.cats.filter((c) => c.grp === 'Upah').map((c) => c.name);
+    const cats = j && !upah.includes(j.category) ? [j.category, ...upah] : upah;
+    const isNew = !j;
+    const curBatches = j ? jobBatches(j).map((b) => b.id) : (preset.batches || []);
+    const status0 = j ? (j.status === 'To pay' ? 'Done' : j.status) : 'Planned';
+    openSheet(isNew ? 'Record a job' : `Edit ${j.ref}`, [
+      { key: 'batches', label: 'Peringkat (tick all that the job covers)', type: 'chips', value: curBatches, options: [...D.batches].sort((x, y) => x.no - y.no).map((b) => [b.id, 'P' + b.no]) },
+      { key: 'category', label: 'Job', type: 'select', value: j?.category || preset.category || 'Upah Sembur Baja', options: cats.map((c) => [c, c]) },
+      { key: 'other_note', label: 'Specify the work', required: true, value: j?.other_note, ph: 'e.g. Potong rumput tepi parit, angkut baja', showIf: (v) => v.category === 'Upah Lain-lain' },
+      { key: 'products', label: 'Products used', value: j?.products, ph: 'e.g. Urea + kapur; Malathion' },
+      { key: 'method', label: 'Method', type: 'select', value: j?.method || '', options: [['', '—'], ['Sembur', 'Sembur (spray)'], ['Tabur', 'Tabur (broadcast)'], ['Manual', 'Manual'], ['Machine', 'Machine']] },
+      { key: 'contractor', label: 'Contractor', value: j ? jobWho(j) : preset.contractor, ph: 'Pick or type a new name', list: D.contractors.map((c) => c.name), note: 'A new name is added to your contractors list.' },
+      { key: 'start_on', label: 'Date (started, or planned)', type: 'date', value: j?.start_on },
+      { key: 'date_note', label: 'Rough date, if no exact date', value: j?.date_note, ph: 'e.g. Week of 1 Dec 2026', showIf: (v) => !v.start_on },
+      { key: 'status', label: 'Status', type: 'select', value: status0, options: [['Planned', 'Planned'], ['Quoted', 'Quoted (price agreed, not started)'], ['In progress', 'In progress'], ['Done', 'Done']] },
+      { key: 'price', label: 'Agreed price (RM)', type: 'number', mode: 'decimal', value: j?.price, ph: 'e.g. 1800', note: 'When a job is done and has a price, it becomes "To pay".' },
+      { key: 'note', label: 'Notes', type: 'textarea', value: j?.note, ph: 'e.g. paid in cash before using the app' }
+    ], async (v) => {
+      let contractor_id = null, contractor_name = null;
+      if (v.contractor) {
+        const found = D.contractors.find((c) => c.name.trim().toLowerCase() === v.contractor.toLowerCase());
+        if (found) { contractor_id = found.id; contractor_name = found.name; }
+        else {
+          const { data, error } = await sb.from('contractors').insert({ plantation_id: D.plantation.id, name: v.contractor }).select('id, name').single();
+          if (error) throw error;
+          contractor_id = data.id; contractor_name = data.name;
+        }
+      }
+      const status = v.status === 'Done' && v.price != null ? 'To pay' : v.status;
+      const row = { category: v.category, other_note: v.category === 'Upah Lain-lain' ? v.other_note : null, products: v.products, method: v.method,
+        contractor_id, contractor_name, start_on: v.start_on, date_note: v.start_on ? null : v.date_note, status, price: v.price, note: v.note };
+      let id = j?.id, ref = j?.ref;
+      if (isNew) {
+        let tries = 0, res;
+        do {
+          ref = nextRef('J-', D.jobs.concat(tries ? [{ ref: ref }] : []));
+          res = await sb.from('jobs').insert({ ...row, plantation_id: D.plantation.id, ref, created_by: D.me.id }).select('id').single();
+          tries++;
+        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
+        if (res.error) throw res.error;
+        id = res.data.id;
+      } else {
+        const { error } = await sb.from('jobs').update(row).eq('id', id);
+        if (error) throw error;
+      }
+      const want = new Set(v.batches || []);
+      const have = new Set(D.jb.filter((x) => x.job_id === id).map((x) => x.batch_id));
+      const add = [...want].filter((b) => !have.has(b)).map((b) => ({ job_id: id, batch_id: b, plantation_id: D.plantation.id }));
+      const del = [...have].filter((b) => !want.has(b));
+      if (add.length) { const { error } = await sb.from('job_batches').insert(add); if (error) throw error; }
+      if (del.length) { const { error } = await sb.from('job_batches').delete().eq('job_id', id).in('batch_id', del); if (error) throw error; }
+      await refresh(isNew ? `${ref} saved` : 'Saved');
+      if (isNew) location.hash = '#job-' + ref;
+    }, isNew ? 'Save job' : 'Save changes');
+  }
+
+  function contractorForm(c) {
+    openSheet(`Edit ${c.name}`, [
+      { key: 'name', label: 'Name', required: true, value: c.name },
+      { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: c.phone },
+      { key: 'ssm_or_ic', label: 'SSM or IC number', value: c.ssm_or_ic },
+      { key: 'bank_name', label: 'Bank', value: c.bank_name, ph: 'e.g. Maybank' },
+      { key: 'account_no', label: 'Account number', value: c.account_no, mode: 'numeric' },
+      { key: 'usual_rates', label: 'Usual rates', value: c.usual_rates, ph: 'e.g. Sembur RM 250 per acre' },
+      { key: 'address', label: 'Address', type: 'textarea', value: c.address }
+    ], async (v) => {
+      const { error } = await sb.from('contractors').update(v).eq('id', c.id);
+      if (error) throw error;
+      await sb.from('jobs').update({ contractor_name: v.name }).eq('contractor_id', c.id).neq('status', 'Paid');
+      await refresh('Contractor saved');
+    });
+  }
+
+  // ---------- paying a contractor ----------
+  function payForm(jobs) {
+    if (!jobs.length) return;
+    const who = jobWho(jobs[0]);
+    const total = jobs.reduce((s, j) => s + Number(j.price || 0), 0);
+    const items = h('div', { class: 'pay-items' }, jobs.map((j) => h('div', { class: 'pi' }, h('span', {}, `${j.ref} · ${jobName(j)} · ${jobPlots(j)}`), h('b', {}, rm(j.price)))),
+      h('div', { class: 'pi total' }, h('span', {}, 'Total to pay'), h('b', {}, rm(total))));
+    const partners = D.members.filter((m) => m.active).map((m) => [m.display_name, m.display_name]);
+    openSheet(`Pay ${who}`, [
+      { type: 'info', node: items },
+      { key: 'paid_by', label: 'Paid by', type: 'select', value: 'From the pool', options: [['From the pool', 'From the pool (plantation account)'], ...partners.map((p) => [p[0], p[1] + ' (own money, to claim back)'])] },
+      { key: 'method', label: 'Method', type: 'select', value: 'Bank transfer', options: [['Bank transfer', 'Bank transfer'], ['DuitNow', 'DuitNow'], ['Cash', 'Cash'], ['Cheque', 'Cheque']] },
+      { key: 'paid_on', label: 'Paid on', type: 'date', value: today(), required: true },
+      { key: 'note', label: 'Note (optional)', value: '', ph: 'e.g. transfer ref 123456' },
+      { type: 'note', label: 'After saving, you can attach the transfer slip or the contractor\'s invoice on the payment page.' }
+    ], async (v) => {
+      const { data, error } = await sb.rpc('record_contractor_payment', { p_job_ids: jobs.map((j) => j.id), p_paid_by: v.paid_by, p_method: v.method, p_paid_on: v.paid_on, p_note: v.note });
+      if (error) throw error;
+      await refresh('Payment recorded');
+      const p = D.pays.find((x) => x.id === data);
+      if (p) location.hash = '#pay-' + p.ref;
+    }, 'Record payment');
+  }
+
+  PAGES.pay = (root, ref) => {
+    const p = D.pays.find((x) => x.ref === ref);
+    if (!p) { location.hash = '#jobs'; return; }
+    const jobs = D.pj.filter((x) => x.payment_id === p.id).map((x) => D.jobs.find((j) => j.id === x.job_id)).filter(Boolean);
+    setHead(`Payment ${p.ref}`, `${p.contractor_name || ''} · ${rm(p.amount)}`, ['Jobs', p.contractor_id ? '#jobs-c-' + p.contractor_id : '#jobs']);
+    root.append(h('div', { class: 'card kvs' },
+      kv('Paid to', p.contractor_id ? h('a', { href: '#jobs-c-' + p.contractor_id }, p.contractor_name) : p.contractor_name),
+      kv('Amount', rm(p.amount)), kv('Paid on', dstr(p.paid_on)), kv('Method', p.method), kv('Paid by', p.paid_by, true),
+      p.note ? kv('Note', p.note, true) : null));
+    root.append(sec('Jobs in this payment'));
+    root.append(card(jobs.map((j) => linkRow('#job-' + j.ref, `${j.ref} · ${jobName(j)}`, `${jobPlots(j)} · ${jobDate(j)}`, rm(j.price))),
+      h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(p.amount)))));
+    root.append(attachBox('payment', p.id, 'Transfer slip & invoice'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Cancel ${p.ref}?`, [{ type: 'note', label: `Use this only if the payment was recorded by mistake. The ${jobs.length} job${jobs.length > 1 ? 's' : ''} go back to "To pay".` }], async () => {
+      const { error } = await sb.rpc('cancel_contractor_payment', { p_payment: p.id });
+      if (error) throw error;
+      location.hash = p.contractor_id ? '#jobs-c-' + p.contractor_id : '#jobs';
+      await refresh('Payment cancelled');
+    }, 'Cancel payment', true) }, 'Cancel this payment'));
+  };
+
+  // ---------- photos and receipts ----------
+  const urlCache = new Map();
+  function attachBox(entity, id, title = 'Photos & receipts') {
+    const box = h('div', { class: 'card' });
+    const draw = () => {
+      const list = D.atts.filter((a) => a.entity === entity && a.entity_id === id);
+      const grid = h('div', { class: 'thumbs' }, list.map((a) => {
+        const isPdf = /\.pdf$/i.test(a.storage_path);
+        const link = h('a', { class: 'thumb' + (isPdf ? ' doc' : ''), target: '_blank', rel: 'noopener', href: urlCache.get(a.storage_path) || '#', 'aria-label': `${a.kind}, open` },
+          isPdf ? h('span', {}, 'PDF') : h('img', { alt: a.kind, loading: 'lazy', src: urlCache.get(a.storage_path) || null }), h('small', {}, a.kind));
+        const canDel = D.isAdmin || a.created_by === D.me.id;
+        return h('div', { class: 'thumb-wrap' }, link, canDel ? h('button', { class: 'thumb-x', type: 'button', 'aria-label': 'Remove', onclick: async () => {
+          if (!window.confirm('Remove this ' + a.kind.toLowerCase() + '?')) return;
+          await sb.storage.from('files').remove([a.storage_path]);
+          const { error } = await sb.from('attachments').delete().eq('id', a.id);
+          if (error) return toast(friendly(error));
+          D.atts = D.atts.filter((x) => x.id !== a.id); draw();
+        } }, '×') : null);
+      }));
+      const status = h('small', { class: 'muted' });
+      const picker = (label, kind, accept) => {
+        const inp = h('input', { type: 'file', accept, multiple: true, class: 'vh', onchange: async (e) => {
+          const files = [...e.target.files]; e.target.value = '';
+          for (const [n, f] of files.entries()) {
+            status.textContent = `Uploading ${n + 1} of ${files.length}…`;
+            try { await upload(entity, id, kind, f); } catch (ex) { toast(friendly(ex)); }
+          }
+          status.textContent = '';
+          await reloadAtts(); draw();
+        } });
+        return h('label', { class: 'btn ghost up' }, inp, label);
+      };
+      box.replaceChildren(sec(`${title} (${list.length})`), list.length ? grid : h('p', { class: 'muted small' }, 'None yet.'),
+        h('div', { class: 'up-row' }, picker('+ Photo', 'Photo', 'image/*'), picker('+ Receipt / invoice', 'Receipt', 'image/*,application/pdf')), status,
+        h('small', { class: 'muted' }, 'Pick from the camera, your photos or files (WhatsApp images included).'));
+      signUrls(list).then((changed) => { if (changed) draw(); });
+    };
+    draw();
+    return box;
+  }
+  async function signUrls(list) {
+    const need = list.map((a) => a.storage_path).filter((p) => !urlCache.has(p));
+    if (!need.length) return false;
+    const { data, error } = await sb.storage.from('files').createSignedUrls(need, 3600);
+    if (error || !data) return false;
+    for (const d of data) if (d.signedUrl) urlCache.set(d.path, d.signedUrl);
+    return true;
+  }
+  async function reloadAtts() {
+    const { data } = await sb.from('attachments').select('*').eq('plantation_id', D.plantation.id).order('created_at');
+    if (data) D.atts = data;
+  }
+  async function upload(entity, id, kind, file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let blob = file, ext = isPdf ? 'pdf' : (file.name.split('.').pop() || 'jpg').toLowerCase(), type = file.type || (isPdf ? 'application/pdf' : 'image/jpeg');
+    if (!isPdf) {
+      const max = { Small: 1280, Medium: 2048 }[D.settings.photo_size || 'Small'];
+      try { if (max || !/jpe?g|png|webp/.test(type)) { blob = await shrink(file, max || 4096); ext = 'jpg'; type = 'image/jpeg'; } } catch (_) { /* keep the original file */ }
+    }
+    if (blob.size > 10 * 1024 * 1024) throw new Error('This file is over 10 MB. Please pick a smaller one.');
+    const uid = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random().toString(16).slice(2);
+    const path = `${D.plantation.id}/${entity}/${id}/${uid}.${ext}`;
+    const up = await sb.storage.from('files').upload(path, blob, { contentType: type, upsert: false });
+    if (up.error) throw up.error;
+    const { error } = await sb.from('attachments').insert({ plantation_id: D.plantation.id, entity, entity_id: id, kind, storage_path: path, bytes: blob.size, created_by: D.me.id });
+    if (error) { await sb.storage.from('files').remove([path]); throw error; }
+  }
+  async function shrink(file, max) {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not read the photo'))), 'image/jpeg', 0.82));
+  }
+
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
-  PAGES.jobs = later('Jobs', 'Stage 2', 'Record work by contractors on one or more peringkat, with products, method, photos and receipts, then pay contractors.');
   PAGES.sales = later('Sales', 'Stage 3', 'Record each harvest pick by grade and price, and the money received from buyers.');
   PAGES.exp = later('Expense', 'Stage 4', 'Partners record what they paid from their own pocket (transport, meals and other costs) and claim it back.');
   PAGES.finance = later('Finance', 'Stage 5', 'Capital pool, purchases, where the money went, and profit shares.');
