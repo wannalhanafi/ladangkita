@@ -159,7 +159,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -190,9 +190,10 @@
       q('purchases'),
       q('alert_actions'),
       q('reports').order('created_at', { ascending: false }),
-      q('crop_templates')
+      q('crop_templates'),
+      q('map_marks')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -202,7 +203,7 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data, templates: templates.data,
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data, templates: templates.data, marks: marks.data,
       savedAt: new Date().toISOString()
     };
   }
@@ -227,7 +228,7 @@
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 3) | 8).toString(16); }));
   const isNetErr = (e) => !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed|offline|timeout|fetch/i.test(String((e && (e.message || e.error_description)) || e));
   const TABLE_KEY = { jobs: 'jobs', job_batches: 'jb', contractors: 'contractors', harvest_picks: 'picks', pick_batches: 'pkb', buyers: 'buyers',
-    expenses: 'expenses', alerts: 'alerts', alert_actions: 'aa', attachments: 'atts', batches: 'batches' };
+    expenses: 'expenses', alerts: 'alerts', alert_actions: 'aa', attachments: 'atts', batches: 'batches', map_marks: 'marks' };
 
   // tiny IndexedDB store for the outbox (photos are kept as blobs)
   let dbp;
@@ -368,7 +369,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || (!name && wide() ? PAGES.dashboard : PAGES.home);
-    const tab = (name === 'dashboard' || (!name && wide())) ? 'dashboard' : !name ? 'home' : TABS[name] || { home: 'home', p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
+    const tab = (name === 'dashboard' || (!name && wide())) ? 'dashboard' : !name ? 'home' : TABS[name] || { home: 'home', mark: 'map', p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -1868,9 +1869,13 @@
       rows: D.receipts.map((r) => [r.ref, dstr(r.received_on), r.source, r.how, r.type, D.uses.filter((u) => u.receipt_id === r.id).map((u) => u.batch_id ? 'P' + (D.batches.find((b) => b.id === u.batch_id)?.no) : u.use).join(', '), r.qty]),
       foot: ['Total', '', '', '', '', '', D.receipts.reduce((s, r) => s + r.qty, 0)] }),
     alerts: () => ({ title: 'Urgent alerts', sheet: 'Alerts', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Reported', t: 'text', w: 16 }, { h: 'Type', t: 'text', w: 22 }, { h: 'Where', t: 'text', w: 16 }, { h: 'Urgency', t: 'text', w: 10 }, { h: 'Status', t: 'text', w: 12 }, { h: 'What happened', t: 'text', w: 30 }, { h: 'Actions', t: 'text', w: 40 }],
-      rows: [...D.alerts].sort((a, b) => a.ref.localeCompare(b.ref)).map((a) => [a.ref, `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, a.type, a.location || '', a.urgency, a.status, a.description || '', alActions(a).map((x) => `${memberName(x.member_id)}: ${x.action}`).join(' | ')]) })
+      rows: [...D.alerts].sort((a, b) => a.ref.localeCompare(b.ref)).map((a) => [a.ref, `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, a.type, a.location || '', a.urgency, a.status, a.description || '', alActions(a).map((x) => `${memberName(x.member_id)}: ${x.action}`).join(' | ')]) }),
+    marks: () => { const cols = mapLayout(); const ms = [...(D.marks || [])].sort(byMade);
+      return { title: 'Map marks', sheet: 'Map marks', sub: 'Sketch from the back of the lot to the road: ' + cols.map((c) => `${c.k.name}: ${c.slices.map((x) => 'P' + x.b.no).join(' → ') || 'not planted'}`).join(' · '),
+        cols: [{ h: 'No.', t: 'int' }, { h: 'Type', t: 'text', w: 9 }, { h: 'Note', t: 'text', w: 36 }, { h: 'Where', t: 'text', w: 26 }, { h: 'Added by', t: 'text', w: 14 }, { h: 'Added', t: 'text', w: 12 }, { h: 'GPS', t: 'text', w: 22 }],
+        rows: ms.map((m, i) => [i + 1, m.type, m.note || '', markWhere(m, cols), m.created_by ? memberName(m.created_by) : '', m.created_at ? dstr(String(m.created_at).slice(0, 10)) : '', m.lat != null ? `${m.lat}, ${m.lng}` : '']) }; }
   };
-  const fullReport = () => [SPEC.finance(), SPEC.spend(), SPEC.keyDates(), SPEC.contractors(), SPEC.jobs(sortJobs(D.jobs)), SPEC.payments(D.pays), SPEC.buyers(), SPEC.picks(sortPicks(D.picks)), SPEC.receipts(D.rcs), SPEC.partnersExp(), SPEC.expenses(sortEx(D.expenses)), SPEC.claims(D.claims), SPEC.purchases(), SPEC.material(), SPEC.alerts()];
+  const fullReport = () => [SPEC.finance(), SPEC.spend(), SPEC.keyDates(), SPEC.contractors(), SPEC.jobs(sortJobs(D.jobs)), SPEC.payments(D.pays), SPEC.buyers(), SPEC.picks(sortPicks(D.picks)), SPEC.receipts(D.rcs), SPEC.partnersExp(), SPEC.expenses(sortEx(D.expenses)), SPEC.claims(D.claims), SPEC.purchases(), SPEC.material(), SPEC.alerts(), SPEC.marks()];
 
   // ---------- Reports page ----------
   async function reloadReports() { const { data } = await sb.from('reports').select('*').eq('plantation_id', D.plantation.id).order('created_at', { ascending: false }); if (data) D.reports = data; if (location.hash === '#reports' && $('sheet-wrap').hidden) route(); }
@@ -2104,6 +2109,7 @@
     for (const e of D.expenses) ev.push([e.created_at, e.paid_from_pool ? null : by(e.member_id), `${e.paid_from_pool ? 'pool paid' : 'spent'} ${rm(e.amount)} · ${e.what || e.type}`, '#ex-' + e.ref]);
     for (const p of D.purchases) if (p.created_by) ev.push([p.created_at, by(p.created_by), `recorded purchase ${p.ref} · ${p.category}`, '#buy-' + p.ref]);
     for (const a of D.alerts) ev.push([a.reported_at, by(a.reported_by), `reported ${a.ref} · ${a.type}`, '#alert-' + a.ref]);
+    for (const m of D.marks || []) if (m.created_by) ev.push([m.created_at, by(m.created_by), `marked the map: ${m.type} · ${m.note || ''}`, '#mark-' + m.id]);
     for (const x of D.aa) ev.push([x.created_at, by(x.member_id), `action on alert: ${x.action}`, '#alert-' + (D.alerts.find((a) => a.id === x.alert_id)?.ref || '')]);
     const recent = ev.filter((e) => e[0]).sort((a, b) => String(b[0]).localeCompare(String(a[0]))).slice(0, 12);
     col2.append(sec('Recent activity'));
@@ -2143,7 +2149,173 @@
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
-  PAGES.map = later('Map', 'Later stage', 'The plantation sketch with blok, peringkat and marks for issues, fences and water.');
+  // ================= MAP (Stage 7d) =================
+  // A sketch of the lot, not to scale: blok side by side (width by area), drains between them, the road at the bottom.
+  // Inside each blok the peringkat are stacked from the back (top) by map_order; height = their share of the blok's area.
+  const byMade = (a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0);
+  const MARK_TYPES = ['Issue', 'Fence', 'Water', 'Note'];
+  const MARK_COL = { Issue: '#B42318', Fence: '#8A5A00', Water: '#2A6FB0', Note: '#3A403C' };
+  const PLANT_COLS = ['#7CC49A', '#B9D3EA', '#F2D58A', '#E7B7C8', '#C9B8E8', '#A7D8D0', '#F0B98A'];
+  let mapMode = 'planted', markMode = false, markType = 'Issue', mapSel = null;
+  const DRAIN = 1.2; // % width of each drain line
+  function mapLayout() {
+    const blocks = [...D.blocks].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+    const acres = blocks.map((k) => Number(k.est_acres || 0) || 1);
+    const tot = acres.reduce((s, a) => s + a, 0);
+    const usable = 100 - DRAIN * Math.max(0, blocks.length - 1);
+    let left = 0;
+    const cols = blocks.map((k, i) => { const w = usable * acres[i] / tot; const c = { k, left, w, slices: [] }; left += w + DRAIN; return c; });
+    for (const c of cols) {
+      const links = D.bb.filter((x) => x.block_id === c.k.id).map((x) => ({ x, b: D.batches.find((b) => b.id === x.batch_id) })).filter((r) => r.b)
+        .sort((p, q) => (p.x.map_order ?? p.b.no) - (q.x.map_order ?? q.b.no) || p.b.no - q.b.no);
+      const kAcres = Number(c.k.est_acres || 0);
+      const share = links.map(({ x, b }) => { const area = Number(b.measured_acres ?? b.est_acres ?? 0); return b.plants && area ? area * x.plants / b.plants : 0; });
+      let used = share.reduce((s, a) => s + a, 0);
+      const scale = kAcres ? Math.max(1, used / kAcres) * kAcres : (used || 1);
+      let top = 0;
+      links.forEach(({ x, b }, i) => { const hgt = 100 * (share[i] || 0) / scale; c.slices.push({ b, x, top, h: hgt }); top += hgt; });
+      c.planted = top;
+    }
+    return cols;
+  }
+  const sliceAt = (cols, px, py) => { for (const c of cols) if (px >= c.left && px <= c.left + c.w) { const s = c.slices.find((s) => py >= s.top && py <= s.top + s.h); return { c, s }; } return { c: null, s: null }; };
+  const markWhere = (m, cols = mapLayout()) => {
+    if (m.x == null) return 'Not placed on the sketch';
+    const { c, s } = sliceAt(cols, Number(m.x) * 100, Number(m.y) * 100);
+    if (s) return `${s.b.name} · ${c.k.name}`;
+    return c ? `${c.k.name} · not in a planted area` : 'On a drain';
+  };
+  function plantGroup(b) {
+    if (!b.planted_on) return 'Not planted';
+    const d = new Date(b.planted_on), half = d.getMonth() < 6 ? 0 : 1;
+    // two-month groups read best for this lot: Sep–Oct, Nov–Dec, …
+    const m0 = d.getMonth() - (d.getMonth() % 2);
+    return `${MONTHS[m0]}–${MONTHS[m0 + 1]} ${d.getFullYear()}` + (half ? '' : '');
+  }
+  function colourKey(b) { return mapMode === 'variety' ? (b.variety || 'Variety not set') : plantGroup(b); }
+
+  PAGES.map = (root) => {
+    setHead('Map', `${D.plantation.name} · sketch, not to scale`);
+    const cols = mapLayout();
+    const batchesSorted = [...D.batches].sort((a, b) => String(a.planted_on || '9').localeCompare(String(b.planted_on || '9')) || a.no - b.no);
+    const keys = [...new Set(batchesSorted.map(colourKey))];
+    const colOf = (b) => { const k = colourKey(b); return k === 'Variety not set' || k === 'Not planted' ? '#E4E2D8' : PLANT_COLS[keys.filter((x) => x !== 'Variety not set' && x !== 'Not planted').indexOf(k) % PLANT_COLS.length]; };
+
+    root.append(h('div', { class: 'seg' }, [['planted', 'Colour by planting date'], ['variety', 'Colour by variety']].map(([v, l]) => h('button', { type: 'button', class: mapMode === v ? 'on' : '', onclick: () => { mapMode = v; route(); } }, l))));
+    root.append(h('div', { class: 'map-legend' }, keys.map((k) => h('span', {}, h('i', { style: `background:${colOf(batchesSorted.find((b) => colourKey(b) === k))}` }), k))));
+    const typeSel = h('select', { 'aria-label': 'Type of mark', onchange: (e) => { markType = e.target.value; } }, MARK_TYPES.map((t) => h('option', { value: t, selected: t === markType }, t)));
+    const markBtn = h('button', { type: 'button', class: 'btn ' + (markMode ? 'primary' : 'ghost'), onclick: () => { markMode = !markMode; mapSel = null; route(); } }, markMode ? 'Now tap the map to place it' : 'Mark on map');
+    root.append(h('div', { class: 'map-tools' }, typeSel, markBtn));
+
+    const head = h('div', { class: 'map-head', 'aria-hidden': 'true' }, cols.map((c) => h('div', { style: `left:${c.left}%;width:${c.w}%` }, c.k.name, h('br'), c.k.est_acres != null ? `~${Number(c.k.est_acres).toFixed(2)} ac` : '')));
+    const map = h('div', { class: 'map' + (markMode ? ' marking' : ''), role: 'group', 'aria-label': 'Plantation sketch' });
+    for (let i = 1; i < cols.length; i++) map.append(h('div', { class: 'drain', style: `left:${cols[i].left - DRAIN}%;width:${DRAIN}%` }));
+    for (const c of cols) {
+      if (c.planted < 85) map.append(h('div', { class: 'unplanted', style: `left:${c.left}%;width:${c.w}%;top:${c.planted + (100 - c.planted) / 2 - 3}%` }, c.planted < 1 ? 'Not planted yet' : 'Rest not planted yet'));
+      for (const s of c.slices) {
+        const on = mapSel === s.b.id;
+        map.append(h('button', { type: 'button', class: 'slice' + (on ? ' on' : '') + (mapSel && !on ? ' dim' : ''), 'aria-label': `${s.b.name}, ${c.k.name}, ${fmt(s.x.plants)} plants`,
+          style: `left:${c.left}%;width:${c.w}%;top:${s.top}%;height:${s.h}%;background:${colOf(s.b)}`,
+          onclick: (e) => { if (markMode) return; e.stopPropagation(); mapSel = on ? null : s.b.id; route(); } },
+          s.h >= 4 ? h('span', {}, h('b', {}, 'P' + s.b.no), ' ', fmt(s.x.plants)) : null));
+      }
+    }
+    const marks = [...(D.marks || [])].sort(byMade);
+    marks.forEach((m, i) => { if (m.x == null) return; map.append(h('a', { class: 'pin', href: '#mark-' + m.id, style: `left:${Number(m.x) * 100}%;top:${Number(m.y) * 100}%;--c:${MARK_COL[m.type] || '#3A403C'}`, 'aria-label': `Mark ${i + 1}: ${m.type}, ${m.note || ''}`, onclick: (e) => { if (markMode) e.preventDefault(); } }, h('b', {}, String(i + 1)))); });
+    map.addEventListener('click', (e) => {
+      if (!markMode) { if (mapSel) { mapSel = null; route(); } return; }
+      const r = map.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      markMode = false;
+      markForm(null, { x, y, type: markType });
+    });
+    root.append(h('div', { class: 'map-wrap' }, head, map, h('div', { class: 'road', 'aria-hidden': 'true' }, h('div', { class: 'drain-h' }), h('div', {}, `Jalan (road) · front of the lot${D.plantation.length_m ? ', ' + fmt(D.plantation.length_m) + ' m' : ''}`))));
+
+    if (mapSel) {
+      const b = D.batches.find((x) => x.id === mapSel), info = batchInfo(b);
+      root.append(h('div', { class: 'card map-sel' }, h('div', {}, h('div', { class: 'h' }, `${b.name} · ${info.blockNames.join(' + ')}`),
+        h('small', { class: 'muted' }, `${fmt(b.plants)} plants · planted ${b.planted_on ? dstr(b.planted_on) : '—'}${info.age != null ? ' · ' + info.age + ' months' : ''}${b.variety ? ' · ' + b.variety : ''}`)),
+        h('a', { class: 'btn primary', href: '#p-' + b.no }, 'Open peringkat')));
+    } else root.append(h('p', { class: 'muted small foot' }, 'Tap a peringkat to see it. The order inside each blok can be changed with "Arrange".'));
+
+    root.append(sec('Marks on the map', xpBtn(SPEC.marks, 'Map marks')));
+    root.append(card(marks.length ? marks.map((m, i) => h('a', { class: 'trow', href: '#mark-' + m.id }, h('span', { class: 'mk-n', style: `--c:${MARK_COL[m.type] || '#3A403C'}` }, String(i + 1)),
+      h('span', { class: 'lmain' }, h('b', {}, `${m.type} · ${m.note || 'No note'}`), h('small', {}, `${markWhere(m, cols)} · ${m.created_by ? memberName(m.created_by) + ', ' : ''}${ago(m.created_at)}`)), h('span', { class: 'chev' }, '›')))
+      : h('p', { class: 'muted' }, 'No marks yet. Choose a type and press Mark on map.')));
+
+    root.append(sec('Arrange the sketch'));
+    root.append(card(cols.filter((c) => c.slices.length > 1).map((c) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, c.k.name), h('small', {}, 'From the back: ' + c.slices.map((s) => 'P' + s.b.no).join(' → ') + ' → road')),
+      h('button', { class: 'btn small-btn', type: 'button', onclick: () => arrangeForm(c) }, 'Arrange'))),
+      h('p', { class: 'muted small' }, 'Heights come from each peringkat\'s area (measured area if entered, otherwise estimated from plants). Blok widths come from their area.')));
+  };
+
+  function arrangeForm(c) {
+    const order = c.slices.map((s) => s.x);
+    const list = h('div', { class: 'arrange' });
+    const draw = () => list.replaceChildren(...order.map((x, i) => { const b = D.batches.find((y) => y.id === x.batch_id);
+      return h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, `${i + 1}. ${b.name}`), h('small', {}, `${fmt(x.plants)} plants in ${c.k.name}`)),
+        h('button', { type: 'button', class: 'btn small-btn', disabled: i === 0, 'aria-label': 'Move up', onclick: () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; draw(); } }, '↑'),
+        h('button', { type: 'button', class: 'btn small-btn', disabled: i === order.length - 1, 'aria-label': 'Move down', onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; draw(); } }, '↓')); }));
+    draw();
+    openSheet(`Arrange ${c.k.name}`, [{ type: 'note', label: 'Top = back of the lot, bottom = next to the road.' }, { type: 'info', node: list }], async () => {
+      for (const [i, x] of order.entries()) {
+        const { error } = await sb.from('batch_blocks').update({ map_order: i + 1 }).eq('batch_id', x.batch_id).eq('block_id', x.block_id);
+        if (error) throw error;
+      }
+      await refresh('Sketch order saved');
+    });
+  }
+
+  function markForm(m, place) {
+    const cols = mapLayout();
+    const pos = m ? { x: m.x, y: m.y } : place;
+    const where = pos && pos.x != null ? markWhere({ x: pos.x, y: pos.y }, cols) : '';
+    const gps = { lat: m?.lat ?? null, lng: m?.lng ?? null };
+    const gpsBox = h('div', { class: 'gps' });
+    const drawGps = () => gpsBox.replaceChildren(...[gps.lat != null ? h('small', { class: 'muted' }, `GPS saved: ${Number(gps.lat).toFixed(5)}, ${Number(gps.lng).toFixed(5)} `) : null,
+      h('button', { type: 'button', class: 'btn link', onclick: () => {
+        if (!navigator.geolocation) return toast('This phone cannot share its location.');
+        toast('Getting your location…');
+        navigator.geolocation.getCurrentPosition((p) => { gps.lat = Math.round(p.coords.latitude * 1e6) / 1e6; gps.lng = Math.round(p.coords.longitude * 1e6) / 1e6; drawGps(); toast('Location added'); },
+          () => toast('Location not available. Allow location for LadangKita in the phone settings.'), { enableHighAccuracy: true, timeout: 15000 });
+      } }, gps.lat != null ? 'Update with where I stand now' : '+ Add my GPS location (stand at the spot)')].filter(Boolean));
+    drawGps();
+    openSheet(m ? 'Edit mark' : `New ${place.type.toLowerCase()} mark`, [
+      where ? { type: 'note', label: `Where: ${where}` } : null,
+      { key: 'type', label: 'Type', type: 'select', value: m ? m.type : place.type, options: MARK_TYPES.map((t) => [t, t]) },
+      { key: 'note', label: 'Note', type: 'textarea', required: true, value: m?.note, ph: 'e.g. Fence post down, about 3 m gap' },
+      { type: 'info', node: gpsBox },
+      { type: 'note', label: m ? 'Add photos on the mark page.' : 'After saving you can add photos.' }
+    ].filter(Boolean), async (v) => {
+      const hit = pos && pos.x != null ? sliceAt(cols, Number(pos.x) * 100, Number(pos.y) * 100).s : null;
+      if (m) {
+        await commit([{ op: 'update', table: 'map_marks', values: { type: v.type, note: v.note, lat: gps.lat, lng: gps.lng }, eq: { id: m.id } }], 'Mark saved', { label: 'Map mark' });
+      } else {
+        const id = uuid();
+        await commit([{ op: 'insert', table: 'map_marks', rows: [{ id, plantation_id: D.plantation.id, type: v.type, note: v.note, x: Math.round(pos.x * 10000) / 10000, y: Math.round(pos.y * 10000) / 10000, lat: gps.lat, lng: gps.lng, batch_id: hit ? hit.b.id : null, created_by: D.me.id, created_at: new Date().toISOString() }] }], 'Mark added', { label: 'Map mark' });
+        location.hash = '#mark-' + id;
+      }
+    }, 'Save', false, true);
+  }
+
+  PAGES.mark = (root, id) => {
+    const m = (D.marks || []).find((x) => x.id === id);
+    if (!m) { location.hash = '#map'; return; }
+    const n = [...D.marks].sort(byMade).indexOf(m) + 1;
+    setHead(`Mark ${n} · ${m.type}`, markWhere(m), ['Map', '#map']);
+    root.append(h('div', { class: 'card kvs' }, kv('Note', m.note, true), kv('Where', markWhere(m), true),
+      kv('Added', `${m.created_by ? memberName(m.created_by) + ', ' : ''}${ago(m.created_at)}`, true),
+      m.lat != null ? kv('GPS', h('a', { href: `https://maps.google.com/?q=${m.lat},${m.lng}`, target: '_blank', rel: 'noopener' }, `${Number(m.lat).toFixed(5)}, ${Number(m.lng).toFixed(5)} · open in Maps`), true) : null,
+      m.alert_id ? kv('Alert', h('a', { href: '#alert-' + (D.alerts.find((a) => a.id === m.alert_id)?.ref || '') }, D.alerts.find((a) => a.id === m.alert_id)?.ref || '—'), true) : null));
+    root.append(h('div', { class: 'alert-btns' }, h('button', { class: 'btn primary', type: 'button', onclick: () => markForm(m) }, 'Edit'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => { mapSel = m.batch_id; location.hash = '#map'; } }, 'Show on map')));
+    root.append(attachBox('map_mark', m.id));
+    if (D.isAdmin || m.created_by === D.me.id) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete mark ${n}?`, [{ type: 'note', label: 'The mark and its note are removed from the map.' }], async () => {
+      await commit([{ op: 'delete', table: 'map_marks', eq: { id: m.id } }], 'Mark deleted', { label: 'Delete map mark' });
+      location.hash = '#map';
+    }, 'Delete mark', true, true) }, 'Delete this mark'));
+  };
+
 
   // ================= START =================
   async function start() {
