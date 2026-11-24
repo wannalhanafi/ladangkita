@@ -1,0 +1,70 @@
+Agencies, grants and aid	Agensi, geran dan bantuan
+. It can take a minute to arrive; check spam too.	. Ia mungkin ambil seminit untuk sampai; semak juga folder spam.
+Ask your plantation's admin partner to add this email on the Partners page, then tap Check again.	Minta rakan kongsi admin ladang anda menambah e-mel ini di halaman Rakan Kongsi, kemudian ketik Semak semula.
+Check again	Semak semula
+Code from the email	Kod daripada e-mel
+Dashboard	Papan Pemuka
+Enter the code	Masukkan kod
+Loading…	Memuatkan…
+Partners' overview (best on a laptop)	Gambaran rakan kongsi (terbaik di komputer riba)
+Partners, capital, shares	Rakan kongsi, modal, bahagian
+Plantation, my details, sign out	Ladang, butiran saya, log keluar
+Saved Excel and PDF files	Fail Excel dan PDF yang disimpan
+Send a new code	Hantar kod baharu
+Sign in with your email	Log masuk dengan e-mel anda
+Signed in as	Log masuk sebagai
+Use another email	Guna e-mel lain
+We sent a code to	Kami telah menghantar kod ke
+We'll email you a sign-in code. No password needed.	Kami akan e-melkan kod log masuk. Tiada kata laluan diperlukan.
+You're signed in, but not on a plantation yet	Anda sudah log masuk, tetapi belum dalam mana-mana ladang
+Close menu	Tutup menu
+LadangKita, go to home	LadangKita, ke Utama
+Main	Utama
+Menu	Menu
+Open	Terbuka
+Closed	Ditutup
+Action taken	Tindakan diambil
+Upah Tabur Baja	Upah Tabur Baja
+Mark as paid	Tanda sebagai dibayar
+Bahasa Melayu	Bahasa Melayu
+Language: Bahasa Melayu	Bahasa: Bahasa Melayu
+Pick	Petikan
+Ready to harvest	Sedia dituai
+Growing	Membesar
+{0} · dates like {1}	{0} · tarikh seperti {1}
+For this phone	Untuk telefon ini
+From the back: {0} → road	Dari belakang: {0} → jalan
+contractor to enter	kontraktor perlu dimasukkan
+you	anda
+{0} each	{0} sebiji
+Cash left in the pool, about {0} (still to pay out {1})	Baki tunai dalam tabung lebih kurang {0} (masih perlu dibayar {1})
+Cash left in the pool, about {0}	Baki tunai dalam tabung lebih kurang {0}
+conditions: {0}	syarat: {0}
+Planted ~{0} ac	Ditanam ~{0} ekar
+not yet planted ~{0} ac	belum ditanam ~{0} ekar
+planting material {0} received, {1} from grants	bahan tanaman {0} diterima, {1} daripada geran
+planting material {0} received	bahan tanaman {0} diterima
+{0} paid in	{0} dibayar
+share of loss {0}	bahagian rugi {0}
+share of profit {0}	bahagian untung {0}
+date not entered	tarikh belum dimasukkan
+not linked to a peringkat yet	belum dikaitkan dengan peringkat
+{0} acres ({1} m × {2} m)	{0} ekar ({1} m × {2} m)
+{0} acres	{0} ekar
+claimed {0}	dituntut {0}
+paid {0} by {1}	dibayar {0} oleh {1}
+Claimed {0}	Dituntut {0}
+not paid yet	belum dibayar
+{0} spent so far, {1}% of the pool.	{0} dibelanjakan setakat ini, {1}% daripada tabung.
+{0} spent so far, {1}% of the pool. {2} item{3} still need a price.	{0} dibelanjakan setakat ini, {1}% daripada tabung. {2} barang masih perlu harga.
+{0} spent so far.	{0} dibelanjakan setakat ini.
+{0} spent so far. {1} item{2} still need a price.	{0} dibelanjakan setakat ini. {1} barang masih perlu harga.
+No costs entered yet.	Belum ada kos dimasukkan.
+No costs entered yet. {0} purchases and jobs are waiting for their price.	Belum ada kos dimasukkan. {0} pembelian dan kerja menunggu harga.
+{0} deliveries	{0} penghantaran
+{0} delivery	{0} penghantaran
+received {0} from {1} ({2})	menerima {0} daripada {1} ({2})
+RM each	RM sebiji
+Someone	Seseorang
+spent {0}	membelanjakan {0}
+pool paid {0}	tabung membayar {0}

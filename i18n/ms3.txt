@@ -1,0 +1,393 @@
+800	Ruj. · daripada
+801	Peringatan disemak setiap pagi lebih kurang 8 pagi. Ia hanya sampai ke telefon yang notifikasinya dihidupkan (di atas).
+802	Buang
+803	Buang tugas
+804	Buang ini
+805	Buang perkara ini?
+806	Buang baris ini?
+807	Buang {0}
+808	Buang {0}?
+809	Dibuang
+810	Tukar nama
+811	Tukar nama {0}
+812	Sewa
+813	Sewa (RM)
+814	Sewa setiap
+815	Buka semula amaran ini
+816	Lapor isu kecemasan
+817	Dilaporkan
+818	Dilaporkan oleh
+819	Laporan
+820	Laporan disimpan selama {0} bulan.
+821	Selebihnya belum ditanam
+822	Peruncit
+823	Jalan / laluan masuk
+824	Peranan
+825	Tarikh anggaran, jika tiada tarikh tepat
+828	SSM / IC
+829	Nombor SSM
+830	Nombor SSM atau IC
+831	Nombor pendaftaran SSM
+832	Jualan
+833	Jualan (RM)
+834	Jualan tolak semua kos
+835	Jualan tolak perbelanjaan.
+836	Jualan tolak perbelanjaan. Rugi adalah biasa sebelum hasil pertama; untuk pulang modal perlu {0} lagi jualan.
+837	Jualan setakat ini
+839	Simpan
+840	Simpan kalendar
+841	Simpan perubahan
+842	Simpan perbelanjaan
+843	Simpan kerja
+844	Simpan atau kongsi
+845	Simpan petikan
+846	Simpan pembelian
+847	Disimpan
+848	Fail Excel dan PDF yang disimpan untuk semua rakan kongsi
+849	Fail Excel dan PDF disimpan, selama {0} bulan
+850	Disimpan di telefon ini. Ia akan diselaraskan apabila ada isyarat.
+851	Laporan disimpan ({0})
+852	Disimpan ke Laporan untuk semua rakan kongsi.
+853	Menyimpan kalendar perlukan isyarat internet.
+854	Menyimpan ke Laporan…
+855	Menyimpan…
+856	Sdn Bhd
+857	Musim
+858	Pilih
+859	Sembur
+860	Sembur
+861	Hantar ujian
+862	Hantar amaran
+863	Hantar kod
+864	Menghantar laporan penuh melalui e-mel memerlukan penghantar e-mel ladang sendiri, yang disediakan sebelum rakan kongsi lain menyertai. Buat masa ini, guna Storan dan sandaran → Muat turun semua data sekarang.
+865	Menghantar…
+866	Sep
+867	Ditetapkan pada: {0}
+868	Tetapkan status kepada {0}
+869	Tetapkan varieti setiap peringkat (Status → ketik peringkat → Ubah) untuk melihat bila setiap satu dijangka berbunga dan berbuah. Bulan diambil daripada kalendar tanaman setiap varieti. Setiap pokok memberi satu buah pada hasil pertama.
+870	Tetapan
+871	Kongsi
+872	Bahagian %
+873	Bahagian rugi (RM)
+874	Bahagian rugi setakat ini
+875	Bahagian rugi setakat ini (RM)
+876	Bahagian untung (RM)
+877	Bahagian untung setakat ini
+878	Bahagian untung setakat ini (RM)
+879	Bahagian dalam ladang
+880	Bahagian dalam ladang (%)
+881	Kos bersama
+882	Bahagian ikut modal dibayar. Masukkan modal setiap rakan kongsi untuk melihat bahagian mereka.
+883	Gambar lebih tajam untuk tanaman dan kerosakan
+884	Helaian
+885	Tunjuk
+886	Tunjuk di peta
+887	Dipaparkan pada laporan.
+888	Dipaparkan apabila kos dan jualan dimasukkan.
+889	Log masuk
+890	Log keluar
+891	Dolar Singapura
+892	Lakaran dari belakang lot ke jalan:
+893	Susunan lakaran disimpan
+894	Kecil
+895	Kecil (lebih kurang 200 KB)
+896	Kos kecil yang dibayar terus dari akaun ladang
+897	Dijual
+898	Dijual (RM)
+899	Dijual kepada
+900	Dijual {0} · pembeli berhutang {1}
+901	Milikan tunggal
+902	Ada masalah pada halaman ini:
+903	Sumber
+904	Nyatakan
+905	Nyatakan kerja
+906	Dibelanja
+907	Dibelanja (RM)
+908	Dibelanja setakat ini
+909	Mula
+910	Mula pada
+911	Status
+912	Masih perlu dibayar {0}
+913	Storan dan sandaran
+914	Storan digunakan
+915	Serta-merta, apabila rakan kongsi melaporkannya
+916	Hantar tuntutan
+917	Dihantar
+918	Sulam
+919	Sulam (ganti pokok mati)
+920	Sulur
+921	Sulur
+922	Ringkasan ikut pembeli
+923	Ringkasan ikut kontraktor
+924	Ringkasan ikut rakan kongsi
+925	Pembekal
+926	Tabur
+927	Tabur
+928	Ketik Muat turun untuk menyimpan salinan di peranti ini.
+929	Ketik Simpan atau kongsi untuk menyimpannya di telefon ini (Save to Files) atau hantar melalui WhatsApp atau e-mel.
+930	Ketik satu bar
+931	Ketik peringkat untuk melihatnya. Susunan dalam setiap blok boleh diubah dengan "Susun".
+932	Ketik peringkat untuk melihat butiran dan kerja yang dibuat padanya.
+933	Ketik satu langkah untuk mengemas kini status.
+934	Ketik untuk tambah
+935	Ketik untuk tambah butiran
+936	Tugas
+937	Nama tugas
+938	Tugas, dikira dari tarikh tanam
+939	Ujian dihantar. Ia sepatutnya sampai dalam beberapa saat.
+940	Baht Thai
+941	Kategori itu sudah ada.
+942	Kod itu salah atau sudah tamat tempoh. Semak e-mel terbaru, atau hantar kod baharu.
+943	E-mel itu sudah ada dalam ladang ini.
+944	Agensi dan senarai semaknya akan dibuang.
+945	Jumlah mesti lebih daripada
+946	Tuntutan dibuang dan perbelanjaannya kembali "Belum dituntut", supaya boleh diubah atau dituntut semula.
+947	Kod ini ada {0} digit.
+948	Penghantaran dan ke mana ia pergi akan dibuang.
+949	Kotak e-mel kosong. Ketik dan taip e-mel anda dahulu.
+950	Rekod geran akan dibuang.
+951	Tanda dan notanya akan dibuang dari peta.
+952	Bulan dan tugas untuk varieti ini akan dibuang.
+953	Tarikh sewa seterusnya bergerak sendiri selepas setiap tarikh akhir (sewa bulanan atau tahunan). Rakan kongsi menerima peringatan sebelumnya.
+954	Resit yang dilampirkan pada setiap perbelanjaan disertakan bersama tuntutan. Rakan kongsi lain menandakannya dibayar.
+955	Ujian tidak dapat dihantar.
+956	Kecurian atau pencerobohan
+957	Kemudian tetapkan bulan dan tugasnya di skrin seterusnya.
+958	Kerja ini daripada rekod penanam. Buka setiap satu dan ketik
+959	Bulan ini hanya panduan permulaan; tetapkan berdasarkan pengalaman sendiri atau nasihat agensi. Setiap peringkat dengan varieti ini menunjukkan tugas ini berserta tarikhnya. Unjuran hasil di Papan Pemuka menggunakan dua nombor pertama.
+960	Ini dibuat tanpa isyarat, tetapi pangkalan data menolaknya semasa dihantar. Cuba lagi, atau buang dan masukkan semula.
+961	Mereka log masuk di ladangkita.pages.dev dengan e-mel ini dan menerima kod.
+962	Ini menambah modal yang dibayar rakan kongsi, jadi bahagian semua orang dikira semula. Simpan slip bank sebagai resit.
+963	Agensi ini ada geran yang direkodkan, jadi ia tidak boleh dipadam.
+964	Pelayar ini tidak boleh memaparkan notifikasi. Di iPhone, guna iOS 16.4 atau lebih baharu dengan LadangKita ditambah ke Home Screen.
+965	Pembeli ini tiada petikan atau bayaran, jadi boleh dibuang dari senarai anda.
+966	Kontraktor ini tiada kerja atau bayaran, jadi boleh dibuang dari senarai anda.
+967	Perbelanjaan ini dalam tuntutan, jadi ia dikunci. Tarik balik tuntutan dahulu untuk mengubahnya.
+968	Fail ini melebihi 10 MB. Sila pilih yang lebih kecil.
+969	Geran ini ada penghantaran yang direkodkan, jadi ia tidak boleh dipadam.
+970	Kerja ini sudah dibayar, jadi harga dan kontraktornya dikunci. Rakan kongsi admin boleh membatalkan bayaran jika tersilap.
+971	Ini perlukan isyarat internet, kerana ia mengubah wang atau tetapan yang dikongsi semua rakan kongsi. Lakukan apabila kembali dalam talian.
+972	Telefon ini
+973	Telefon ini tidak boleh berkongsi lokasi.
+974	Petikan ini sudah dibayar, jadi buah, harga dan pembelinya dikunci. Rakan kongsi admin boleh membatalkan bayaran jika tersilap.
+975	Tanda perbelanjaan untuk dituntut
+976	Tanda kerja untuk dibayar
+977	Tanda petikan yang dibayar
+978	Untuk menuntut, ketik nama anda di atas, tanda perbelanjaan anda, kemudian ketik Tuntut.
+979	Perlu dibayar
+980	Untuk membayar kontraktor, ketik namanya di atas, tanda kerja, kemudian ketik Bayar.
+981	Kontraktor perlu dibayar
+982	Terlalu banyak permintaan kod. Sila tunggu beberapa minit, kemudian cuba lagi.
+983	Atas = belakang lot, bawah = sebelah jalan.
+984	Jumlah tambahan modal (RM)
+985	Jumlah
+986	Keluasan keseluruhan (ekar)
+987	Jumlah modal {0}. Bahagian ikut modal dibayar.
+988	Jumlah diterima
+989	Jumlah untuk dituntut ({0} perkara)
+990	Jumlah perlu dibayar
+991	Slip pindahan
+992	Slip pindahan & invois
+993	Pengangkutan
+994	Pengangkutan (minyak, tol, parkir)
+995	Cuba lagi
+996	Matikan
+997	Hidupkan notifikasi
+998	Jenis
+999	Jenis pembeli
+1000	Jenis tanda
+1001	Dolar AS
+1003	Upah
+1004	Upah (kerja berbayar)
+1005	Upah Lain-lain
+1006	Upah Lain-lain:
+1007	Upah Sembur Baja
+1008	Kemas kini dengan tempat saya berdiri sekarang
+1009	Muat naik logo ladang
+1010	Muat naik logo perlukan isyarat internet.
+1011	Memuat naik {0} daripada {1}…
+1012	Tahap kecemasan
+1013	Amaran kecemasan
+1014	Amaran kecemasan terbuka
+1015	Isu kecemasan, terbuka dan ditutup
+1016	Guna ini hanya jika tuntutan tersilap ditanda dibayar.
+1017	Guna ini hanya jika bayaran tersilap direkodkan. {0} kerja itu kembali kepada "Perlu dibayar".
+1018	Guna ini hanya jika bayaran tersilap direkodkan. {0} petikan itu kembali kepada "Pembeli berhutang".
+1019	Digunakan untuk
+1020	Digunakan untuk setiap jumlah dalam aplikasi dan laporan
+1021	Kadar biasa
+1022	Nilai atau kos
+1023	Nilai atau kos kepada kita
+1024	Varieti
+1025	Varieti dipadam
+1026	Nama varieti
+1027	Varieti belum ditetapkan
+1028	Varieti disimpan
+1029	Air
+1030	Laman web
+1031	Sandaran mingguan melalui e-mel
+1032	Ringkasan mingguan
+1033	Slip timbang & invois
+1034	Apa
+1035	Untuk apa
+1036	Apa yang berlaku
+1037	Apa ia
+1038	Jenis isu
+1039	Syarat mereka
+1040	Syarat mereka ({0}/{1} selesai)
+1041	Apa yang dibuat
+1042	Apa yang anda terima
+1043	Apabila pembeli membayar, ketik namanya di atas, tanda petikan, kemudian ketik Rekod bayaran.
+1044	Apabila petikan buah belum dibayar, kemudian setiap minggu
+1045	Apabila kerja siap dan ada harga, ia menjadi "Perlu dibayar".
+1046	Apabila rakan kongsi menuntut, kemudian setiap minggu selagi belum dibayar
+1047	Apabila mana-mana rakan kongsi melaporkan isu kecemasan, telefon ini menerima notifikasi serta-merta, walaupun aplikasi ditutup.
+1048	Di mana
+1049	Tempat ia ditanam ditetapkan di skrin seterusnya.
+1050	Ke mana ia pergi
+1051	Ke mana ia pergi ({0} daripada {1})
+1052	Ke mana wang pergi
+1053	Di mana: {0}
+1054	Geran mana
+1055	Seluruh ladang
+1056	Pemborong
+1057	Tarik balik tuntutan
+1058	Tarik balik tuntutan ini
+1059	Tarik balik {0}?
+1060	Kerja oleh kontraktor, dan bayaran kepada mereka
+1061	Kerja yang dibuat dan langkah seterusnya
+1062	Kerja yang mereka buat
+1064	Tahun
+1065	Anda tidak dibenarkan membuat perubahan ini. Minta rakan kongsi admin.
+1066	Anda direkodkan sebagai rakan kongsi yang membayar tuntutan ini. Tambah slip pindahan di halaman tuntutan.
+1067	Anda satu-satunya rakan kongsi admin. Jadikan rakan kongsi lain admin dahulu.
+1068	Anda ·
+1069	E-mel anda belum ada dalam mana-mana ladang
+1070	Pilihan anda sendiri; rakan kongsi lain memilih pilihan mereka
+1072	tindakan pada amaran: {0}
+1089	sudah tiba
+1090	cth. 20 beg Vintage 15-15-15
+1091	cth. 34,000 sulur
+1092	cth. A dan B
+1093	cth. A dan B sahaja
+1094	cth. Semua dibaiki; sudah diperiksa di tapak
+1095	cth. Bayar bil air
+1096	cth. Beli Racun Rumput
+1097	cth. Tunai semasa ambil / 14 hari
+1098	cth. Pagar rosak di sebelah timur, lebih kurang 40 pokok tercabut
+1099	cth. Tiang pagar tumbang, lebih kurang 3 m terbuka
+1100	cth. Pagar dibaiki oleh Rosli Jentera, RM 350
+1101	cth. Sulur percuma
+1102	cth. Percuma / subsidi RM 5,000
+1103	cth. Hj. Mahmud
+1104	cth. LPNM (Lembaga Perindustrian Nanas Malaysia)
+1105	cth. Sulur percuma LPNM
+1106	cth. MD2
+1107	cth. Maybank
+1108	cth. Perjalanan ke ladang bulan November
+1109	cth. Minyak & tol ke ladang
+1110	cth. Pontian, Johor
+1111	cth. Potong rumput tepi parit, angkut baja
+1112	cth. Berdaftar sebagai penanam dengan LPNM
+1113	cth. Laporkan kemajuan tanaman kepada pegawai setiap 6 bulan
+1114	cth. Sembur RM 250 seekar
+1115	cth. Sembur {0} 250 seekar
+1116	cth. Tabur baja
+1117	cth. Urea + kapur; Malathion
+1118	cth. Minggu 1 Dis 2026
+1119	cth. tunai di tempat, atau dalam 7 hari
+1120	cth. dibayar tunai sebelum guna aplikasi
+1121	cth. ruj. pindahan 123456
+1122	cth. ditimbang 1,250 kg; lori dari FAMA
+1123	cth. pemborong, FAMA, gerai pasar
+1124	cth. www.lpnm.gov.my
+1130	jam lalu
+1136	baru sahaja
+1142	garis =
+1145	menanda peta: {0} · {1}
+1146	minit lalu
+1150	tidak dikenakan pada peringkat
+1151	membayar {0} {1} ({2})
+1153	harga perlu dimasukkan
+1154	menerima {0} daripada {1} ({2})
+1155	merekod hasil {0} · {1} buah
+1156	merekod kerja {0} · {1}
+1157	merekod pembelian {0} · {1}
+1158	melaporkan {0} · {1}
+1161	bahagian rugi
+1162	bahagian untung
+1163	menunjukkan salinan anda dari {0}
+1166	menyelaras…
+1170	untuk menambah kontraktor dan harga.
+1172	sehingga {0} buah
+1173	digunakan {0} kali
+1179	{0} (kini {1})
+1181	{0} ekar
+1183	{0} blok
+1184	{0} kategori dalam Beli, Upah dan Lain
+1185	{0} perubahan di telefon ini belum diselaraskan dan akan hilang jika anda log keluar. Log keluar juga?
+1186	{0} perubahan diselaraskan
+1187	{0} perubahan menunggu untuk diselaraskan
+1188	{0} tuntutan menunggu bayaran · {2}
+1189	{0} kontraktor · {1} pembeli
+1190	{0} tidak dapat disimpan · lihat
+1191	Butiran {0}
+1192	{0} daripada rekod penanam
+1193	{0} buah
+1194	{0} buah dipetik
+1195	{0} buah dipetik {1} akan dibuang bersama gambarnya. Ini tidak boleh dibatalkan.
+1196	{0} jualan setakat ini.
+1197	{0} sudah ada dalam senarai.
+1198	{0} sedang dibina
+1199	{0} kini {1}
+1200	{0} ditetapkan pada {1}. Ubah itu dahulu.
+1201	{0} digunakan {1} kali, jadi ia tidak boleh dibuang.
+1202	{0} barang masih perlu harga
+1203	{0} kerja siap
+1204	{0} kerja{1}
+1205	{0} kerja
+1206	{0} kerja siap
+1207	{0} mesti nombor.
+1208	{0} perlukan kontraktor dan kos
+1209	{0} pada {1}
+1210	{0} dibayar · bahagian {1}
+1212	{0} tuntutan rakan kongsi perlu dibayar · {2}
+1213	{0} rakan kongsi
+1214	{0} kerja lepas perlukan kontraktor dan harga
+1215	{0} peringkat
+1216	{0} peringkat · {1} blok
+1217	{0} petikan belum dibayar
+1218	{0} petikan{1}
+1219	{0} petikan direkodkan
+1220	{0} pokok di {1}
+1221	{0} pokok · ditanam {1}{2}{3}
+1222	{0} pokok · {1} peringkat · {2} blok · {3} ekar
+1223	{0} gambar resit lagi. Anda masih boleh menuntut, dan tambah gambar pada perbelanjaan kemudian.
+1224	{0} direkodkan
+1225	{0} disimpan
+1227	{0} isu kecemasan terbuka
+1228	{0} menunggu
+1229	{0} tanpa harga · {1} tanpa kontraktor
+1230	{0} · blok dan peringkat
+1231	{0} · modal, kos dan jualan
+1233	{0} · bukan di kawasan bertanam
+1234	{0} · belum log masuk
+1235	{0} · lakaran, bukan ikut skala
+1236	{0} · {1} buah
+1237	{0} · {1} akan dibuang bersama gambarnya. Ini tidak boleh dibatalkan.
+1238	{0} · {1} akan dibuang bersama resitnya. Ini tidak boleh dibatalkan.
+1239	{0} · {1} {2} daripada {3}
+1240	{0} · {1} · dilaporkan oleh {2}, {3}
+1242	{0} · {1} · {2} buah
+1243	{0} · {1}: penghantaran
+1244	{0}, buka
+1245	{0}, {1} · buka di Maps
+1246	{0}, {1}, {2} pokok
+1249	{0}/{1} selesai
+1250	{0}: bila
+1252	{0}{1} akan dibuang bersama resitnya. Ini tidak boleh dibatalkan.
+1253	{0}{1} · {2} penghantaran
+1254	~{0} ekar
+1255	— bukan daripada agensi tersenarai —
+1256	← rugi
+1257	→ jalan

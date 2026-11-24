@@ -1,0 +1,458 @@
+330	English
+331	Bahasa Melayu · tarikh seperti {0}
+332	Masukkan harga
+333	Masukkan kod yang kami hantar
+334	Masukkan bilangan buah untuk sekurang-kurangnya satu gred.
+335	Masukkan harga
+336	Masukkan harga untuk setiap gred yang ada buah.
+338	Anggaran keluasan
+339	Anggaran keluasan (ekar)
+340	Anggaran keluasan (daripada bilangan pokok; ganti dengan ukuran sebenar)
+341	Anggaran {0} ekar
+342	Setiap kos dimasukkan di bawah satu kategori
+343	Semua jadual dalam satu fail. Data juga disimpan dengan selamat di pelayan dengan sandaran harian.
+344	Setiap jadual dalam aplikasi juga ada butang Excel / PDF sendiri.
+345	Semua dalam satu fail: kewangan dan bahagian, kos ikut kategori, peringkat, kerja dan bayaran kontraktor, hasil dan bayaran pembeli, perbelanjaan dan tuntutan, pembelian, bahan tanaman dan amaran. Excel meletakkan setiap bahagian dalam helaian sendiri.
+346	Excel
+347	Excel / PDF
+348	Excel paling sesuai untuk mengolah nombor; PDF paling sesuai untuk dihantar atau dicetak.
+349	Belanja
+350	Perbelanjaan ikut rakan kongsi
+351	Tuntutan perbelanjaan
+352	Perbelanjaan dipadam
+353	Ringkasan perbelanjaan ikut rakan kongsi
+354	Perbelanjaan
+355	Perbelanjaan dalam tuntutan ini
+356	Perbelanjaan dibayar dari tabung
+357	Perbelanjaan · {0}
+358	Eksport · {0}
+359	Pengeksport
+360	Kilang
+361	Feb
+362	Pagar
+363	Pagar / sempadan
+364	Istilah ladang kekal dalam bahasa asal: blok, peringkat, upah, beli…
+365	Mengisi pilihan dalam Kerja dan Jualan
+366	Kewangan
+367	Kebakaran
+368	Banjir atau saliran
+369	Untuk
+370	Untuk peringkat (pilihan)
+371	Untuk telefon ini
+372	Percuma
+373	Sulur percuma daripada geran {0}
+374	Daripada
+375	Daripada (penjual atau agensi)
+376	Daripada (pembekal atau orang)
+377	Dari belakang:
+378	Daripada rekod penanam.
+379	Daripada rekod penanam. Ketik untuk melengkapkan.
+380	Dari tabung
+381	Dari tabung (akaun ladang)
+382	Buah
+383	Buah ikut gred, dan harga sebiji hari ini
+384	Bilangan buah mesti nombor bulat.
+385	Buah seekar (jangkaan)
+386	Nama penuh (seperti dalam IC)
+387	Nama penuh seperti dalam IC
+388	Laporan penuh ladang
+389	Laporan penuh
+390	GPS
+391	GPS disimpan: {0}, {1}
+393	Terima amaran kecemasan di telefon ini
+394	Mendapatkan lokasi anda…
+395	Memuatkan ladang anda
+396	Agensi kerajaan
+397	Gred
+398	Gred A
+399	Gred A RM sebiji
+400	Buah gred A
+401	Gred B
+402	Gred B RM sebiji
+403	Buah gred B
+404	Gred C
+405	Gred C RM sebiji
+406	Buah gred C
+407	Gred dibeli
+408	Gred yang mereka beli
+409	Geran
+410	Geran dipadam
+411	Geran atau bantuan
+412	Geran disimpan
+413	Geran {0} direkodkan
+414	Geran
+415	Geran dan bantuan
+416	Geran dan bantuan daripada agensi ini
+417	Geran dan bantuan diterima
+418	Geran diterima: {0}
+419	Kumpulan
+421	Hasil
+422	Unjuran hasil
+423	Petikan buah
+424	Petikan buah dan wang daripada pembeli
+425	Petikan buah · {0}
+426	Mula menuai
+427	Ketinggian ikut keluasan setiap peringkat (keluasan diukur jika ada, jika tidak dianggar daripada bilangan pokok). Lebar blok ikut keluasannya.
+428	Sembunyi
+429	Tinggi
+430	Tinggi: bertindak hari ini
+431	Utama
+432	Hormon (aruhan bunga)
+433	Cara
+434	Berapa banyak
+435	Bilangan mesti lebih daripada 0.
+436	Tahap kecemasan
+437	Cara kami memperolehnya
+438	Nombor IC dan akaun bank disembunyikan dalam senarai dan hanya boleh dilihat oleh rakan kongsi admin dan rakan kongsi itu sendiri.
+439	Butiran IC dan bank ialah data peribadi di bawah PDPA. Hanya rakan kongsi admin dan rakan kongsi ini boleh melihatnya; ia disembunyikan dalam senarai dan hanya digunakan untuk membayar bahagian untung dan tuntutan.
+440	Nombor IC
+441	Sedang dibuat
+442	Dalam ladang ini
+443	Tidak aktif
+444	Tidak aktif (keluar perkongsian)
+445	Individu
+446	Rupiah Indonesia
+447	Kecederaan atau kemalangan
+448	Masuk ke tabung
+449	Masuk ke tabung (akaun ladang)
+450	Isu
+451	Ia tidak lagi ditawarkan semasa merekod kos.
+452	Barang
+453	Jalan · hadapan lot{0}
+454	Jambul
+455	Jambul (crown)
+456	Jan
+457	Kerja
+458	Kerja dipadam
+459	Kerja
+460	Kerja hampir tiba atau lewat
+461	Kerja dalam bayaran ini
+462	Kerja yang tidak lengkap
+463	Kerja yang belum ada kontraktor
+464	Kerja tanpa kontraktor
+465	Kerja {0}
+466	Kerja · {0}
+467	Menyertai
+468	Menyertai pada
+469	Josapine
+470	Jul
+471	Jun
+472	Simpan laporan selama
+473	Simpan gambar resit pada perbelanjaan ini; ia disertakan bersama tuntutan.
+474	Tarikh penting ikut peringkat
+475	LadangKita
+476	LadangKita · {0}
+477	Lain
+478	Lain (lain-lain)
+479	Lain-lain
+480	Tanah dan pajakan
+481	Sewa tanah perlu dibayar
+482	Tuan tanah
+483	Bahasa
+484	Bahasa dan tarikh
+485	Kerja terakhir
+486	Terkini:
+487	Pajakan hampir tamat
+488	Pajakan tamat
+489	Pajakan tamat pada
+490	Biarkan kosong untuk terus guna anggaran daripada bilangan pokok.
+491	Surat, borang dan gambar
+492	Memuatkan
+493	Lokasi
+494	Lokasi ditambah
+495	Lokasi tidak tersedia. Benarkan lokasi untuk LadangKita dalam tetapan telefon.
+496	Logo
+497	Logo disimpan
+498	Rugi setakat ini
+499	Rugi setakat ini {0}
+500	MB
+501	MD2
+503	Jentera
+504	Dibuat {0} oleh {1}
+505	Buat laporan penuh
+506	Menyediakan fail Excel…
+507	Menyediakan PDF…
+508	Ringgit Malaysia
+509	Manual
+510	Peta
+511	Tanda peta
+512	Tanda peta
+513	Peta, rekod luar talian dan notifikasi telefon akan datang. Semua yang anda lihat di sini ialah data sebenar ladang anda.
+514	Mac
+515	Tanda ditambah
+516	Tanda sebagai siap
+517	Tanda belum dibayar
+518	Tanda sebagai sudah mula
+519	Tanda dipadam
+520	Tanda di peta
+521	Tanda dibayar
+522	Tanda dibayar · {0}
+523	Tanda disimpan
+524	Tanda belum dibayar
+525	Tanda {0} dibayar
+526	Tanda {0} belum dibayar?
+527	Tanda {0} · {1}
+528	Tanda {0}: {1}, {2}
+529	Ditanda siap. Masukkan harga supaya boleh dibayar.
+530	Gerai pasar
+531	Tanda di peta
+532	Mei
+533	Saya
+534	Makan
+535	Keluasan diukur
+536	Keluasan diukur (ekar)
+537	Sederhana
+538	Sederhana (lebih kurang 500 KB)
+539	Kaedah
+540	Pelbagai
+541	Pagi Isnin: minggu lepas dalam angka
+542	Ringkasan wang
+543	Wang dibelanjakan untuk
+544	Bulan
+545	Bulan selepas tanam
+546	Bulan {0} · {1} {2}
+547	Bulan dan tugas untuk setiap varieti
+548	Bulan dan tugas ikut varieti: {0}
+549	Bulan dari hormon hingga menuai
+550	Bulan dari tanam hingga hormon
+551	Moris Gajah
+552	Morris
+553	Turun
+554	Naik
+555	Butiran saya
+556	NGO
+557	Nama
+558	Nama yang dipaparkan dalam aplikasi
+559	Nama, logo, nombor SSM, lokasi, tanah dan pajakan
+560	Perlu perhatian
+561	Pembeli baharu
+562	Kontraktor baharu
+563	Perbelanjaan baharu {0}
+564	Petikan buah baharu {0}
+565	Kerja baharu {0}
+566	Tanda {0} baharu
+567	Seterusnya
+568	Waris
+569	Waris (nama dan telefon)
+570	Sewa seterusnya
+571	Sewa seterusnya pada
+572	Kerja seterusnya
+573	Seterusnya, rekodkan ke peringkat mana ia pergi. Jika dibeli, tambah juga kosnya dalam Kewangan.
+574	Seterusnya: {0} {1}
+575	Belum ada butiran IC atau bank. Ia diperlukan kemudian untuk membayar bahagian untung dan tuntutan.
+576	Belum ada tindakan.
+577	Belum ada agensi.
+578	Tiada amaran
+579	Belum ada amaran. Bagus.
+580	Belum ada butiran bank (tambah di halaman Rakan Kongsi)
+581	Jenis pembeli belum ditetapkan
+582	Belum ada tuntutan.
+583	Belum ada kontraktor.
+584	Belum ada kos dimasukkan. Masukkan harga pembelian di atas dan kos setiap kerja.
+586	Belum ada penghantaran direkodkan.
+587	Belum ada perbelanjaan.
+588	Belum ada geran.
+589	Belum ada buah dipetik dari peringkat ini.
+590	Belum ada petikan buah.
+591	Belum ada hasil dijual.
+592	Belum ada hasil
+593	Tiada sambungan internet. Sila semak isyarat dan cuba lagi.
+594	Belum ada kerja.
+595	Belum ada tanda. Pilih jenis dan tekan Tanda di peta.
+596	Belum ada unjuran untuk {0}: tetapkan varietinya.
+597	Belum ada bayaran diterima.
+598	Belum ada bayaran.
+599	Tiada peringkat
+600	Belum ada pembelian.
+601	Belum ada jualan. Jualan hasil dipaparkan sebaik petikan direkodkan dalam Jualan.
+602	Belum ada laporan disimpan. Guna butang Excel / PDF pada mana-mana jadual, atau buat laporan penuh di atas.
+603	Tiada isyarat
+604	Tiada isyarat, dan telefon ini belum ada salinan. Buka aplikasi sekali dengan isyarat dahulu.
+605	Belum ada tugas.
+606	Belum ada varieti. Tambah satu untuk bermula.
+607	Belum ada kerja direkodkan
+608	Belum ada kerja direkodkan.
+609	Jenis kerja belum ditetapkan
+610	No.
+611	Tiada
+612	Belum ada. Nama juga ditambah apabila anda menaip nama baharu dalam kerja atau petikan buah.
+613	Belum ada.
+614	Tiada.
+615	Biasa sebelum hasil pertama
+616	Belum dituntut
+617	Belum dituntut (RM)
+618	Belum dituntut
+619	Belum dimasukkan
+620	Belum dimasukkan
+621	Belum dikaitkan dengan peringkat.
+622	Tidak perlu (dibayar dari tabung)
+623	Bukan sekarang
+624	Belum dibayar
+625	Tidak diletakkan pada lakaran
+626	Belum ditanam
+627	Belum ditanam
+628	Tidak berdaftar
+629	Belum ditetapkan pada mana-mana peringkat (Status → peringkat → Ubah).
+630	Belum ditetapkan
+631	Belum log masuk.
+632	Nota
+633	Nota (pilihan)
+634	Nota kepada rakan kongsi (pilihan)
+635	Nota
+636	Belum ada lagi, cth. "Berdaftar sebagai penanam", "Salinan perjanjian pajakan tanah".
+637	Tiada apa perlu perhatian. Semua beres.
+638	Tiada hutang kepada kita
+639	Belum ada yang dirancang.
+640	Belum ada rekod dalam aplikasi. Kerja, hasil, bayaran, perbelanjaan dan amaran baharu akan dipaparkan di sini.
+641	Tiada yang menunggu bayaran
+642	Notifikasi
+643	Notifikasi
+644	Notifikasi disekat untuk LadangKita di telefon ini. Buka Settings telefon → Notifications → LadangKita dan benarkan, kemudian kembali.
+645	Notifikasi disekat untuk LadangKita. Benarkan dalam Settings telefon, kemudian cuba lagi.
+646	Notifikasi dimatikan untuk telefon ini
+647	Notifikasi dihidupkan untuk telefon ini
+648	Notifikasi tidak dibenarkan.
+649	Nov
+650	Sekarang ketik peta untuk meletakkannya
+651	Okt
+652	Pegawai
+653	Laporan lama dibuang apabila admin membuka Laporan. Gambar dan rekod tidak pernah dibuang secara automatik.
+654	Di atas parit
+655	Dihidupkan untuk telefon ini. Anda akan diberitahu serta-merta apabila rakan kongsi lain melaporkan isu kecemasan.
+656	Di iPhone, notifikasi hanya berfungsi apabila LadangKita dibuka dari ikon di Home Screen. Dalam Safari ketik Share → Add to Home Screen, buka LadangKita dari ikon baharu, kemudian kembali ke sini.
+657	Hanya rakan kongsi admin boleh mengubah ini.
+658	Hanya tinggal {0} daripada penghantaran ini.
+659	Hanya {0} atau rakan kongsi admin boleh menuntut perbelanjaan ini.
+660	Terbuka
+661	Kerja belum selesai
+662	Buka peringkat
+663	Asal
+664	Lain-lain
+665	Belanja duit sendiri belum dituntut
+666	Belanja duit sendiri belum dituntut (RM)
+668	PDF
+669	Muka surat {0} daripada {1}
+670	Dibayar
+671	Dibayar (RM)
+672	Dibayar oleh
+673	Dibayar oleh {0}; tuntut di Belanja jika perlu.
+674	Dibayar dari tabung
+675	Dibayar pada
+676	Dibayar kepada
+677	Dibayar {0} · {1} · {2}{3}
+678	Rakan kongsi
+679	Rakan kongsi ditambah
+680	Tuntutan rakan kongsi belum dibayar
+681	Perbelanjaan rakan kongsi dan barang yang tidak dikaitkan dengan peringkat
+682	Penyata rakan kongsi
+683	Penyata rakan kongsi · {0}
+684	Rakan Kongsi
+685	Rakan kongsi dan bahagian untung
+686	Rakan kongsi yang menghidupkan notifikasi akan terus menerimanya di telefon; semua orang melihatnya di atas Utama. Jika tidak boleh tunggu, telefon juga mereka.
+687	Papan pemuka rakan kongsi · dikemas kini {0}
+688	Belanja duit sendiri rakan kongsi, dan tuntutan
+689	Rakan kongsi, modal dan bahagian
+690	Perkongsian
+691	Sudah lepas
+692	Bayar kepada
+693	Bayar {0}
+694	Bayar {0} · {1} kerja · {3}
+695	Bayaran
+696	Bayaran dibatalkan
+697	Bayaran daripada {0}
+698	Bayaran direkodkan
+699	Syarat bayaran
+700	Bayaran {0}
+701	Bayaran {0} · {1}
+702	Bayaran daripada {0}
+703	Bayaran diterima
+704	Bayaran diterima daripada pembeli
+705	Bayaran kepada kontraktor
+706	Bayaran kepada {0}
+707	Perbelanjaan Rakan Kongsi
+708	Peringkat
+709	Peringkat (tanda semua yang diliputi kerja ini)
+710	Wang ikut peringkat
+711	Peringkat yang dipetik (tanda semua)
+712	Peringkat yang ditetapkan varieti ini akan dinamakan semula bersamanya.
+713	Peringkat: kos, jualan dan untung
+714	Wabak perosak atau penyakit
+715	Peso Filipina
+716	Telefon
+717	Notifikasi telefon
+718	Gambar
+719	Saiz gambar disimpan
+720	Saiz gambar semasa muat naik
+721	Saiz gambar, tempoh simpan laporan, muat turun semua data
+722	Gambar
+723	Gambar & resit
+724	Gambar dan resit {0} ({1} fail) · laporan {2} ({3} fail) · rekod sangat kecil.
+725	Petikan
+726	Petikan dipadam
+727	Pilih dari kamera, gambar atau fail anda (termasuk gambar WhatsApp).
+728	Pilih dari senarai atau taip sendiri.
+729	Pilih atau taip nama baharu
+730	Dipetik pada
+731	Petikan
+732	Petikan dalam bayaran ini
+733	Rekod ladang nanas
+734	Dirancang
+735	Modal ladang {0} · kos {1} · jualan {2} · {3} {4}
+736	Logo ladang
+737	Nama ladang
+738	Profil ladang
+739	Profil ladang disimpan
+740	Lakaran ladang
+741	Ditanam
+743	Ditanam · langkah seterusnya
+744	Tanam
+745	Bahan tanaman
+746	Bahan tanaman diterima
+747	Pokok
+748	Sila isi {0}.
+749	Sila taip alamat e-mel penuh.
+750	Sila tunggu {0} saat sebelum meminta kod baharu.
+751	Sila tunggu…
+752	Kolam
+753	Terkumpul
+754	Harga perlu dimasukkan
+755	Harga diisi daripada {0}; ubah jika harga hari ini berbeza.
+756	Butiran peribadi
+757	Butiran peribadi (pilihan)
+758	Bahan
+759	Bahan digunakan
+760	Untung
+761	Untung (RM)
+762	Untung dibahagi ikut modal dibayar, selepas semua kos. Tuan tanah hanya menerima sewa.
+763	Untung dibahagi ikut modal dibayar, selepas semua kos. Tiada pembahagian sehingga tabung dibayar balik atau rakan kongsi bersetuju.
+764	Untung setakat ini
+765	Untung setakat ini {0}
+766	Program atau skim
+767	Pembelian dipadam
+768	Pembelian
+769	Pembelian tanpa harga
+771	Kuantiti
+772	Kuantiti
+773	Kuantiti mesti lebih daripada 0.
+774	Sebut harga
+775	Sebut harga (harga dipersetujui, belum mula)
+780	Sedia
+781	Resit
+782	Resit & invois
+783	Diterima
+784	Diterima (RM)
+785	Diterima (kuantiti)
+786	Diterima pada
+787	Diterima {0} · {1} · {2}{3}
+788	Aktiviti terkini
+789	Disyorkan
+790	Disyorkan: cukup jelas untuk resit, jimat ruang dan data
+791	Rekod petikan buah
+792	Rekod kerja
+793	Rekod pembelian atau bayaran
+794	Rekod setiap petikan di sini: buah ikut gred, harga sebiji pada hari itu, dan siapa membeli.
+795	Rekod geran atau bantuan
+796	Rekod bayaran
+797	Rekod bayaran daripada {0}
+798	Rekod bayaran daripada {0} · {1}
+799	Ruj.

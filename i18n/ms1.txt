@@ -1,0 +1,318 @@
+0	"Masukkan harga" = bahan tanaman dari rekod penanam, menunggu harganya. Ketik untuk masukkan harga.
+1	% daripada kos
+3	(dipegang untuk tabung)
+4	(saya)
+7	(duit sendiri, untuk dituntut semula)
+8	+ Tambah pembeli
+9	+ Tambah kategori
+10	+ Tambah kontraktor
+11	+ Tambah rakan kongsi
+12	+ Tambah syarat
+13	+ Tambah agensi
+14	+ Tambah perbelanjaan
+15	+ Tambah lokasi GPS saya (berdiri di tempat itu)
+16	+ Tambah tugas
+17	+ Tambah ke mana ia pergi
+18	+ Kerja baharu
+19	+ Gambar
+20	+ Resit / invois
+21	+ Rekod penghantaran
+22	+ Rekod petikan buah
+23	+ Rekod kerja untuk peringkat ini
+24	+ Rekod pembelian atau bayaran
+25	+ Rekod geran atau bantuan
+26	+ Rekod bahan tanaman diterima
+27	+ Varieti
+28	+ sulam
+29	/ pokok
+31	1 hari sebelum
+32	12 bulan
+33	14 hari sebelum
+34	24 bulan
+35	3 hari sebelum
+36	3 bulan sebelum
+37	30 hari sebelum
+38	6 bulan
+39	6 bulan sebelum
+40	7 hari sebelum
+42	= lain-lain. Kewangan menunjukkan wang ikut kategori ini.
+43	= kerja berbayar (digunakan untuk Kerja),
+44	= barang dibeli,
+45	Versi Bahasa Melayu belum dibina.
+46	Kontraktor yang ada kerja atau bayaran tidak boleh dipadam, supaya rekod kekal lengkap.
+47	Panduan daripada kalendar varieti; rekodkan kerja sebenar sebagai Kerja.
+48	Kod baharu sedang dihantar. Guna e-mel yang terbaru.
+49	Nama baharu ditambah ke senarai pembeli anda.
+50	Nama baharu ditambah ke senarai kontraktor anda.
+53	Nama pemegang akaun
+54	Nombor akaun
+55	Ekar
+56	Tindakan ditambah
+57	Tindakan diambil
+58	Tindakan
+59	Tindakan yang diambil
+60	Aktif
+61	Tambah
+62	Tambah kategori
+63	Tambah rakan kongsi
+64	Tambah syarat
+65	Tambah varieti
+66	Tambah tindakan
+67	Tambah tindakan
+68	Tambah agensi
+69	Tambah perbelanjaan
+70	Tambah modal
+71	Masukkan modal setiap rakan kongsi di ☰ Rakan Kongsi untuk melihat tabung dan bahagian.
+72	Tambah rakan kongsi
+73	Tambah gambar di halaman tanda.
+74	Tambah modal
+75	Ditambah
+76	Ditambah oleh
+77	Alamat
+78	Admin
+79	Rakan kongsi admin
+80	Rakan kongsi admin (boleh tambah rakan kongsi, ubah modal)
+81	Selepas 14 hari
+82	Selepas 30 hari
+83	Selepas 7 hari
+84	Selepas simpan, anda boleh tambah gambar.
+85	Selepas simpan, tambah gambar resit di halaman seterusnya.
+86	Selepas simpan, anda boleh lampirkan slip bank atau nota bayaran pembeli di halaman bayaran.
+87	Selepas simpan, anda boleh lampirkan slip pindahan atau invois kontraktor di halaman bayaran.
+88	Selepas hantar, tambah gambar di halaman amaran.
+89	Umur
+90	Umur (bulan)
+91	Agensi
+92	Agensi, geran dan bantuan
+93	Agensi
+94	Agensi dipadam
+95	Agensi disimpan
+96	Harga dipersetujui
+97	Harga dipersetujui (RM)
+98	Amaran
+99	Amaran ditutup
+100	Amaran dibuka semula
+101	Amaran dihantar
+102	Amaran {0}
+103	Amaran
+104	Amaran, tuntutan, kerja, sewa, pembeli, ringkasan mingguan
+105	Semua amaran
+106	Semua amaran ({0})
+107	Semua pembeli
+108	Ladang selamat, tiada amaran
+109	Semua kontraktor
+110	Semua kos telah dimasukkan
+111	Semua kos ada harga
+112	Semua data
+113	Semua kerja
+114	Semua sudah dibayar
+115	Semua rakan kongsi
+116	Hampir siap
+117	Simpan juga ke Laporan, supaya semua rakan kongsi boleh buka (disimpan 12 bulan)
+118	Jumlah
+119	Jumlah (RM)
+120	Jumlah / %
+121	Jumlah mesti lebih daripada
+122	Anggaran daripada kalendar tanaman setiap varieti (☰ Tetapan → Kalendar tanaman); kerja hormon yang siap menggantikan tarikh jangkaan berbunga. "Sehingga" = satu buah sepokok.
+123	Kerosakan haiwan (babi hutan, monyet)
+124	Rakan kongsi lain menandakan tuntutan anda dibayar apabila mereka memindahkan wang kepada anda.
+125	Dipohon
+126	Dipohon pada
+127	Diluluskan
+128	Diluluskan pada
+129	Apr
+130	Keluasan
+131	Keluasan (diukur)
+132	Susun
+133	Susun lakaran
+134	Susun {0}
+135	Seperti diambil oleh kamera (boleh beberapa MB)
+136	Minta {0} buka ladangkita.pages.dev di telefon dan log masuk dengan {1}. Mereka akan terus nampak ladang ini.
+137	Ogo
+139	Sandaran
+140	Bank
+141	Bank atau pembiayaan
+142	Slip bank & nota bayaran
+143	Pindahan bank
+144	Sebelum kerja yang dirancang; sehari selepas lewat, kemudian setiap minggu
+145	Sebelum tarikh tamat pajakan
+146	Sebelum tarikh sewa seterusnya (ditetapkan dalam profil ladang)
+147	Sedang dibina:
+148	Beli
+149	Beli (barang dibeli)
+151	Blok
+152	Dibeli
+153	Dolar Brunei
+154	Jenis perniagaan
+155	Pembeli
+156	Pembeli dipadam
+157	Pembeli berhutang
+158	Pembeli berhutang (RM)
+159	Bayaran pembeli tertunggak
+160	Bayaran pembeli
+161	Pembeli disimpan
+162	Pembeli · petikan buah dan bayaran
+163	Pembeli
+164	Pembeli ({0})
+165	Pembeli berhutang dengan kita
+166	Pembeli berhutang {0}
+167	Batal
+168	Batalkan bayaran
+169	Batalkan bayaran ini
+170	Batalkan {0}?
+171	Modal (RM)
+172	Modal dan bahagian
+173	Modal {0} kini {1}
+174	Modal belum dimasukkan
+175	Modal belum dimasukkan: masukkan modal setiap rakan kongsi di ☰ Rakan Kongsi.
+176	Modal dibayar
+177	Modal dibayar (RM)
+178	Tabung modal
+179	Modal terkumpul
+180	Modal yang dimasukkan rakan kongsi: {0}.
+181	Modal {0} · kos {1} · jualan {2} · {3} {4} · baki tunai lebih kurang {5}
+182	Modal, untung dan bahagian
+183	Tunai
+184	Baki tunai dalam tabung
+186	Kategori
+187	Kategori ditambah
+188	Kategori dibuang
+189	Kategori · barang · daripada
+190	Tukar
+191	Tukar logo
+192	Perubahan belum diselaraskan di peranti ini
+193	Perubahan yang tidak dapat disimpan
+194	Menukarnya hanya menukar simbol yang dipaparkan; jumlah yang sudah dimasukkan tidak ditukar nilainya.
+195	Perubahan ini perlukan isyarat internet.
+196	Semak e-mel anda
+197	Menyemak…
+198	Cek
+199	Tuntut
+200	Tuntutan kembali belum dibayar
+201	Tuntutan ditanda dibayar
+202	Tuntutan dihantar
+203	Tuntutan ditarik balik
+204	Tuntutan {0}
+205	Tuntut {0} perbelanjaan · {2}
+206	Tuntutan {0} · {1}
+207	Tuntut · {0}
+208	Dituntut
+209	Dituntut oleh
+210	Dituntut pada
+212	Dituntut, belum dibayar
+213	Dituntut, belum dibayar (RM)
+214	Dituntut, menunggu bayaran
+215	Dituntut, menunggu bayaran (RM)
+216	Tuntutan
+217	Tuntutan telah dibayar balik
+218	Tuntutan telah dibayar balik (RM)
+219	Tuntutan · {0}
+220	Tutup
+221	Tutup amaran
+222	Tutup {0}
+223	Ditutup
+224	Nota penutup
+225	Warna ikut tarikh tanam
+226	Warna ikut varieti
+227	Akan datang
+228	Akan datang
+229	Syarikat
+230	Selesai
+231	Syarat
+232	Syarat dan laporan
+233	Hubungi
+234	Kontraktor
+235	Kontraktor dipadam
+236	Kontraktor belum dimasukkan
+237	Bayaran kontraktor
+238	Masalah kontraktor
+239	Kontraktor disimpan
+240	Kontraktor · kerja dan bayaran
+241	Kontraktor
+242	Kontraktor ({0})
+243	Kontraktor dan pembeli
+244	Kontraktor perlu dibayar
+245	Koperasi
+246	Kategori kos
+247	Kos sepokok (RM)
+248	Kos perlu dimasukkan
+249	Kos dan jualan yang meliputi beberapa peringkat dibahagi ikut bilangan pokok. Perbelanjaan rakan kongsi dan barang yang tidak dikaitkan dengan peringkat ditunjukkan sebagai kos bersama.
+250	Kos ikut kategori
+251	Kos setakat ini {0} · Jualan {1}
+252	Tidak dapat memuatkan alat laporan. Semak sambungan internet anda.
+253	Tidak dapat memuatkan ladang anda:
+254	Tidak dapat menghubungi perkhidmatan notifikasi. Semak isyarat dan cuba lagi.
+255	Tidak dapat membaca gambar
+256	Kritikal
+257	Kritikal: bertindak sekarang
+258	Kalendar tanaman
+259	Kalendar tanaman disimpan
+260	Kalendar tanaman · {0}
+261	Mata wang
+262	Mata wang disimpan
+263	Tarikh
+264	Tarikh (mula, atau dirancang)
+265	Format tarikh
+266	Format tarikh disimpan di telefon ini
+267	Tarikh petik
+268	Tarikh belum ditetapkan
+269	Dis
+270	Lalai
+271	Padam
+272	Padam pembeli
+273	Padam kontraktor
+274	Padam perbelanjaan
+275	Padam kerja
+276	Padam tanda peta
+277	Padam tanda
+278	Padam tanda {0}?
+279	Padam petikan
+280	Padam pembelian
+281	Padam agensi ini
+282	Padam pembeli ini
+283	Padam kontraktor ini
+284	Padam perbelanjaan ini
+285	Padam geran ini
+286	Padam kerja ini
+287	Padam tanda ini
+288	Padam petikan ini
+289	Padam pembelian ini
+290	Padam rekod ini
+291	Padam laporan ini untuk semua?
+292	Padam varieti
+293	Padam {0}?
+294	Dipadam
+295	Penghantaran
+296	Penghantaran dan ke mana ia pergi ({0})
+297	Nota penghantaran dan gambar
+298	Butiran
+299	Buang
+300	Dibuang
+301	Daerah, negeri
+302	Dokumen dan surat
+303	Siap
+304	Selesai · kembali ke Utama
+305	Siap · kos perlu dimasukkan
+306	Siap, perlu dibayar
+307	Siap, perlu dibayar (RM)
+308	Muat turun
+309	Muat turun semua data sekarang (Excel / PDF)
+310	Muat turun laporan penuh (Excel / PDF)
+311	DuitNow
+313	Ubah
+314	Ubah / lengkapkan rekod ini
+315	Ubah butiran agensi
+316	Ubah butiran pembeli
+317	Ubah butiran kontraktor
+318	Ubah butiran geran
+319	Ubah tanda
+320	Ubah butiran saya
+321	Ubah nota atau peringkat
+322	Ubah rakan kongsi
+323	Ubah perbelanjaan ini
+324	Ubah petikan ini
+325	Ubah pembelian ini
+326	Ubah varieti, keluasan diukur atau nota
+327	Ubah {0}
+328	E-mel
+329	E-mel (untuk log masuk)

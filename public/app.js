@@ -13,7 +13,60 @@
   const cx = (txt) => String(txt).replace(/\bRM\b/g, CUR());
   const rm = (n) => CUR() + ' ' + Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // ---------- language: Bahasa Melayu by default, English in Settings ----------
+  const LANG = (() => { try { return localStorage.getItem('lk_lang') === 'en' ? 'en' : 'ms'; } catch (_) { return 'ms'; } })();
+  const MONTHS = LANG === 'ms' ? ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'] : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const DICT = LANG === 'ms' ? (window.LK_MS || {}) : {};
+  // patterns for text with changing parts, e.g. "{0} fruit" → "{0} buah"; longest fixed text first
+  const PATS = Object.keys(DICT).filter((k) => /\{\d\}/.test(k)).map((k) => {
+    // a changing part never reaches across " · ", so notes are not swallowed by loose patterns
+    const re = new RegExp('^' + k.split(/(\{\d\})/).map((x) => (/^\{\d\}$/.test(x) ? '((?:(?! · )[\\s\\S])*?)' : x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('') + '$');
+    const order = [...k.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
+    return { re, order, to: DICT[k], prefix: k.split('{')[0], fixed: k.replace(/\{\d\}/g, '').length, num: /^\{0\} [a-z(]/.test(k) };
+  }).sort((a, b) => b.fixed - a.fixed);
+  const trCache = new Map();
+  function T(str) {
+    if (LANG !== 'ms' || typeof str !== 'string' || !/[A-Za-z]/.test(str)) return str;
+    if (trCache.has(str)) return trCache.get(str);
+    const m = str.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    const core = m[2];
+    let r = DICT[core];
+    if (r == null) for (const p of PATS) {
+      if (p.prefix && !core.startsWith(p.prefix)) continue;
+      const g = core.match(p.re);
+      if (!g) continue;
+      if (p.num && !/\d/.test(g[1])) continue; // "{0} fruit" needs a number in {0}
+      r = p.to.replace(/\{(\d)\}/g, (_, n) => { const v = g[p.order.indexOf(Number(n)) + 1] ?? ''; return DICT[v.trim()] != null ? DICT[v.trim()] : v; });
+      break;
+    }
+    if (r == null) { const c = core.match(/^([\s\S]*\S) \((\d+)\)$/); if (c) { const t = T(c[1]); if (t !== c[1]) r = `${t} (${c[2]})`; } }
+    if (r == null && core.includes(' · ')) { const parts = core.split(' · ').map((x) => T(x)); r = parts.join(' · '); if (r === core) r = null; }
+    const out = r == null ? str : m[1] + r + m[3];
+    if (trCache.size < 5000) trCache.set(str, out);
+    return out;
+  }
+  // translate whatever appears on screen: text, placeholders, labels (user data rarely matches, and stored values stay English)
+  function trTree(root) {
+    if (LANG !== 'ms') return;
+    const doAttr = (el) => { for (const a of ['placeholder', 'aria-label', 'title']) { const v = el.getAttribute && el.getAttribute(a); if (v) { const t = T(v); if (t !== v) el.setAttribute(a, t); } } };
+    if (root.nodeType === 3) { const t = T(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t; return; }
+    if (root.nodeType !== 1 || root.closest?.('[data-notr]')) return;
+    doAttr(root);
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (n.nodeType === 1) { if (n.tagName === 'SCRIPT' || n.tagName === 'STYLE' || n.tagName === 'TEXTAREA') continue; doAttr(n); }
+      else if (n.parentElement && !n.parentElement.closest('[data-notr],textarea,script,style')) { const t = T(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
+    }
+  }
+  if (LANG === 'ms') {
+    document.documentElement.lang = 'ms';
+    trTree(document.body);
+    new MutationObserver((ms) => { for (const mu of ms) { if (mu.type === 'characterData') trTree(mu.target); else for (const n of mu.addedNodes) trTree(n); } })
+      .observe(document.body, { childList: true, subtree: true, characterData: true });
+    const conf = window.confirm.bind(window);
+    window.confirm = (msg) => conf(T(msg));
+  }
   const p2 = (n) => String(n).padStart(2, '0');
   const DATE_FMTS = { 'd MMM y': (d) => { const [y, m, x] = d.split('-').map(Number); return `${x} ${MONTHS[m - 1]} ${y}`; }, 'dd/mm/y': (d) => { const [y, m, x] = d.split('-'); return `${x}/${m}/${y}`; }, 'y-mm-dd': (d) => d };
   const dateFmt = () => { try { const v = localStorage.getItem('lk_datefmt'); return DATE_FMTS[v] ? v : 'd MMM y'; } catch (_) { return 'd MMM y'; } };
@@ -66,7 +119,7 @@
     $('title').textContent = title || '';
     $('subtitle').textContent = subtitle || '';
     const b = $('back');
-    if (back) { b.hidden = false; b.textContent = '‹ ' + back[0]; b.href = back[1]; } else b.hidden = true;
+    if (back) { b.hidden = false; b.textContent = '‹ ' + T(back[0]); b.href = back[1]; } else b.hidden = true;
   }
 
   // ================= SIGN IN =================
@@ -897,7 +950,7 @@
     ['parties', 'Contractors and buyers', () => `${D.contractors.length} contractor(s) · ${D.buyers.length} buyer(s)`],
     ['notif', 'Notifications', () => 'Alerts, claims, jobs due, rent, buyers, weekly summary'],
     ['storage', 'Storage and backup', () => 'Photo size, how long reports are kept, download all data'],
-    ['lang', 'Language and dates', () => `English · dates like ${dstr(today())}`]
+    ['lang', 'Language and dates', () => `${LANG === 'ms' ? 'Bahasa Melayu' : 'English'} · dates like ${dstr(today())}`]
   ];
   const back = ['Settings', '#settings'];
   const adminNote = () => (D.isAdmin ? null : h('p', { class: 'muted small foot' }, 'Only the admin partner can change this.'));
@@ -1130,8 +1183,12 @@
   SETTINGS.lang = (root) => {
     setHead('Language and dates', 'For this phone', back);
     root.append(sec('Language'));
-    root.append(radioList([['en', 'English', 'Field words stay in Malay: blok, peringkat, upah, beli…']], 'en', () => {}));
-    root.append(h('p', { class: 'muted small foot' }, 'A Bahasa Melayu version is not built yet.'));
+    root.append(radioList([['ms', 'Bahasa Melayu', ''], ['en', 'English', '']], LANG, (v) => {
+      if (v === LANG) return;
+      try { localStorage.setItem('lk_lang', v); } catch (_) { /* ignore */ }
+      location.reload();
+    }));
+    root.append(h('p', { class: 'muted small foot' }, 'Field words stay in Malay: blok, peringkat, upah, beli…'));
     root.append(sec('Date format'));
     const ex = '2026-11-25';
     root.append(radioList(Object.entries(DATE_FMTS).map(([k, f]) => [k, f(ex), k === 'd MMM y' ? 'Default' : '']), dateFmt(), (v) => { try { localStorage.setItem('lk_datefmt', v); } catch (_) { /* ignore */ } route(); toast('Date format saved on this phone'); }));
@@ -1553,7 +1610,7 @@
     setHead(`${k.ref} · ${fmt(pickFruit(k))} fruit`, `${dstr(k.picked_on)} · ${rc ? 'Received' : 'Buyer owes'}`, ['Sales', '#sales']);
     const g = (name, n, pr) => (n ? [h('span', {}, name), h('span', { class: 'r' }, fmt(n)), h('span', { class: 'r' }, money2(pr)), h('span', { class: 'r' }, money2(n * pr))] : []);
     root.append(h('div', { class: 'card' }, h('div', { class: 'grades' },
-      h('span', { class: 'gh' }, 'Grade'), h('span', { class: 'gh r' }, 'Fruit'), h('span', { class: 'gh r' }, CUR() + ' each'), h('span', { class: 'gh r' }, CUR()),
+      h('span', { class: 'gh' }, 'Grade'), h('span', { class: 'gh r' }, 'Fruit'), h('span', { class: 'gh r' }, T(`${CUR()} each`) === `${CUR()} each` ? `${CUR()} ${LANG === 'ms' ? 'sebiji' : 'each'}` : T(`${CUR()} each`)), h('span', { class: 'gh r' }, CUR()),
       g('Grade A', Number(k.grade_a), Number(k.price_a)), g('Grade B', Number(k.grade_b), Number(k.price_b)), g('Grade C', Number(k.grade_c), Number(k.price_c)),
       h('span', { class: 't' }, 'Total'), h('span', { class: 't r' }, fmt(pickFruit(k))), h('span', { class: 't' }), h('span', { class: 't r' }, rm(pickAmt(k))))));
     root.append(h('div', { class: 'card kvs' },
@@ -2018,7 +2075,7 @@
   // ================= URGENT ALERTS (Stage 5) =================
   const AL_TYPES = ['Theft or trespass', 'Animal damage (wild boar, monkeys)', 'Fire', 'Flood or drainage', 'Pest or disease outbreak', 'Injury or accident', 'Contractor problem', 'Other'];
   const alKind = (st) => ({ Open: 'red', 'Action taken': 'gold', Closed: 'green' })[st];
-  const ago = (ts) => { const d = new Date(ts); const mins = Math.round((Date.now() - d) / 60000); if (mins < 60) return mins <= 1 ? 'just now' : mins + ' min ago'; if (mins < 1440) return Math.round(mins / 60) + ' h ago'; return dstr(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); };
+  const ago = (ts) => { const d = new Date(ts); const mins = Math.round((Date.now() - d) / 60000); if (mins < 60) return mins <= 1 ? T('just now') : `${mins} ${LANG === 'ms' ? 'minit lalu' : 'min ago'}`; if (mins < 1440) return `${Math.round(mins / 60)} ${LANG === 'ms' ? 'jam lalu' : 'h ago'}`; return dstr(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); };
   const alActions = (a) => D.aa.filter((x) => x.alert_id === a.id).sort((x, y) => String(x.created_at).localeCompare(String(y.created_at)));
 
   function alertPanel() {
@@ -2104,11 +2161,15 @@
   const stamp = () => { const d = new Date(); return `${dstr(today())} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
   const fileBase = (title) => `${D.plantation.name} - ${title} - ${today()}`.replace(/[\\/:*?"<>|]+/g, '-');
 
+  // Excel/PDF in the chosen language: titles, headings and exact words such as statuses
+  const trSpec = (sp) => ({ ...sp, title: T(sp.title), sub: sp.sub ? T(sp.sub) : sp.sub, sheet: sp.sheet ? T(sp.sheet) : sp.sheet,
+    cols: sp.cols.map((c) => ({ ...c, h: T(cx(c.h)) })), rows: sp.rows.map((r) => r.map((v) => (typeof v === 'string' ? T(v) : v))), foot: sp.foot ? sp.foot.map((v) => (typeof v === 'string' ? T(v) : v)) : sp.foot });
   async function makeXlsx(specs) {
+    specs = specs.map(trSpec);
     await loadScript('vendor/write-excel-file.min.js');
     const sheets = specs.map((sp, i) => {
       const bold = { fontWeight: 'bold' };
-      const head = [[{ value: D.plantation.name, ...bold, fontSize: 14 }], [{ value: sp.title, ...bold }], [{ value: `${sp.sub ? sp.sub + ' · ' : ''}Made ${stamp()} by ${D.me.display_name}` }], []];
+      const head = [[{ value: D.plantation.name, ...bold, fontSize: 14 }], [{ value: sp.title, ...bold }], [{ value: (sp.sub ? sp.sub + ' · ' : '') + T(`Made ${stamp()} by ${D.me.display_name}`) }], []];
       const cell = (v, c) => {
         if (v == null || v === '') return null;
         if ((c.t === 'money' || c.t === 'int') && typeof v === 'number' && isFinite(v)) return { value: c.t === 'money' ? Math.round(v * 100) / 100 : v, type: Number, format: c.t === 'money' ? '#,##0.00' : '#,##0' };
@@ -2126,6 +2187,7 @@
   async function makePdf(specs) {
     await loadScript('vendor/jspdf.umd.min.js');
     await loadScript('vendor/jspdf.plugin.autotable.min.js');
+    specs = specs.map(trSpec);
     const wide = specs.some((s) => s.cols.length > 5);
     const doc = new window.jspdf.jsPDF({ orientation: wide ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
     const W = doc.internal.pageSize.getWidth();
@@ -2134,7 +2196,7 @@
       if (i) doc.addPage();
       doc.setFillColor(31, 77, 58); doc.rect(0, 0, W, 22, 'F');
       doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(safe(`LadangKita · ${D.plantation.name}`), 12, 10);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(safe(`Made ${stamp()} by ${D.me.display_name}`), 12, 16);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(safe(T(`Made ${stamp()} by ${D.me.display_name}`)), 12, 16);
       doc.setTextColor(27, 31, 28); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text(safe(sp.title), 12, 32);
       let y = 34;
       if (sp.sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(92, 99, 94); const lines = doc.splitTextToSize(safe(sp.sub), W - 24); doc.text(lines, 12, 38); y = 36 + lines.length * 4.2; }
@@ -2153,7 +2215,7 @@
       });
     });
     const n = doc.getNumberOfPages();
-    for (let p = 1; p <= n; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(120, 126, 122); doc.text(`Page ${p} of ${n}`, W - 12, doc.internal.pageSize.getHeight() - 8, { align: 'right' }); }
+    for (let p = 1; p <= n; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(120, 126, 122); doc.text(T(`Page ${p} of ${n}`), W - 12, doc.internal.pageSize.getHeight() - 8, { align: 'right' }); }
     return doc.output('blob');
   }
 
@@ -2506,7 +2568,7 @@
     for (const x of D.aa) ev.push([x.created_at, by(x.member_id), `action on alert: ${x.action}`, '#alert-' + (D.alerts.find((a) => a.id === x.alert_id)?.ref || '')]);
     const recent = ev.filter((e) => e[0]).sort((a, b) => String(b[0]).localeCompare(String(a[0]))).slice(0, 12);
     col2.append(sec('Recent activity'));
-    col2.append(card(recent.length ? recent.map((e) => h('a', { class: 'trow act', href: e[3] }, h('span', { class: 'lmain' }, h('b', {}, `${e[1] || 'Someone'} ${e[2]}`), h('small', {}, ago(e[0]))))) : h('p', { class: 'muted' }, 'Nothing recorded in the app yet. New jobs, harvests, payments, expenses and alerts will show here.')));
+    col2.append(card(recent.length ? recent.map((e) => h('a', { class: 'trow act', href: e[3] }, h('span', { class: 'lmain' }, h('b', {}, `${e[1] || T('Someone')} ${T(e[2])}`), h('small', {}, ago(e[0]))))) : h('p', { class: 'muted' }, 'Nothing recorded in the app yet. New jobs, harvests, payments, expenses and alerts will show here.')));
   };
 
   function topUpForm() {
@@ -2663,7 +2725,7 @@
       : h('p', { class: 'muted' }, 'No marks yet. Choose a type and press Mark on map.')));
 
     root.append(sec('Arrange the sketch'));
-    root.append(card(cols.filter((c) => c.slices.length > 1).map((c) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, c.k.name), h('small', {}, 'From the back: ' + c.slices.map((s) => 'P' + s.b.no).join(' → ') + ' → road')),
+    root.append(card(cols.filter((c) => c.slices.length > 1).map((c) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, c.k.name), h('small', {}, `From the back: ${c.slices.map((s) => 'P' + s.b.no).join(' → ')} → road`)),
       h('button', { class: 'btn small-btn', type: 'button', onclick: () => arrangeForm(c) }, 'Arrange'))),
       h('p', { class: 'muted small' }, 'Heights come from each peringkat\'s area (measured area if entered, otherwise estimated from plants). Blok widths come from their area.')));
   };

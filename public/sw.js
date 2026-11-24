@@ -1,8 +1,8 @@
 // LadangKita service worker: lets the app open without signal.
 // App files: try the network first (so updates arrive), fall back to the saved copy when offline.
 // Fonts: saved copy first. Supabase data and photos are never handled here.
-const CACHE = 'lk-app-v6';
-const SHELL = ['./', 'index.html', 'app.js', 'styles.css', 'config.js', 'manifest.webmanifest', 'vendor/supabase.js',
+const CACHE = 'lk-app-v8';
+const SHELL = ['./', 'index.html', 'i18n-ms.js', 'app.js', 'styles.css', 'config.js', 'manifest.webmanifest', 'vendor/supabase.js',
   'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
