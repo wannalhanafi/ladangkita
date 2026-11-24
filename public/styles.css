@@ -389,3 +389,14 @@ a.alert-item{text-decoration:none;gap:3px}
 button.x{background:none;border:0;color:#9AA39D;font-size:22px;min-width:36px;min-height:36px;cursor:pointer}
 .row-btns{display:flex;gap:16px;flex-wrap:wrap}
 .trow.past{opacity:.6}
+
+/* ---------- Agencies and grants ---------- */
+a.mrow{color:inherit;text-decoration:none}
+.trow.req .lmain.done{color:var(--muted);text-decoration:line-through}
+.check{width:28px;height:28px;border-radius:8px;border:2px solid var(--green);background:#fff;color:#fff;font-weight:700;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.check.on{background:var(--green)}
+.steps{display:flex;gap:4px}
+.step{flex:1;background:none;border:0;padding:4px 0;display:flex;flex-direction:column;align-items:center;gap:6px;font:inherit;font-size:11px;color:var(--muted);cursor:pointer;min-height:44px}
+.step i{display:block;width:100%;height:6px;border-radius:3px;background:#E4E2D8}
+.step.on i{background:var(--green)}
+.step.on span{color:var(--green);font-weight:600}

@@ -164,7 +164,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks, areq] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -196,9 +196,10 @@
       q('alert_actions'),
       q('reports').order('created_at', { ascending: false }),
       q('crop_templates'),
-      q('map_marks')
+      q('map_marks'),
+      q('agency_requirements')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp, expenses, claims, ce, purchases, aa, reports, templates, marks, areq];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -208,7 +209,7 @@
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
       cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
       buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data,
-      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data, templates: templates.data, marks: marks.data,
+      expenses: expenses.data, claims: claims.data, ce: ce.data, purchases: purchases.data, aa: aa.data, reports: reports.data, templates: templates.data, marks: marks.data, areq: areq.data,
       savedAt: new Date().toISOString()
     };
   }
@@ -374,7 +375,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || (!name && wide() ? PAGES.dashboard : PAGES.home);
-    const tab = (name === 'dashboard' || (!name && wide())) ? 'dashboard' : !name ? 'home' : TABS[name] || { home: 'home', mark: 'map', p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
+    const tab = (name === 'dashboard' || (!name && wide())) ? 'dashboard' : !name ? 'home' : TABS[name] || { home: 'home', mark: 'map', agency: '', grant: '', mat: '', p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales', ex: 'exp', cl: 'exp', buy: 'finance' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -708,24 +709,181 @@
   }
 
   // ---------- Agencies (read-only for now) ----------
+  // ================= AGENCIES, GRANTS AND PLANTING MATERIAL =================
+  const GR_STEPS = ['Applied', 'Approved', 'Received', 'Planted', 'Completed'];
+  const AG_TYPES = ['Government agency', 'Cooperative', 'Bank or financing', 'NGO', 'Company', 'Other'];
+  const agName = (id) => D.agencies.find((a) => a.id === id)?.name || '';
+  const grMaterial = (g) => D.receipts.filter((r) => r.grant_id === g.id);
+  const matUses = (r) => D.uses.filter((u) => u.receipt_id === r.id);
+  const nextBT = () => 'BT-' + String(D.receipts.reduce((m, x) => Math.max(m, parseInt(String(x.ref).replace(/\D/g, ''), 10) || 0), 0) + 1).padStart(2, '0');
+
   PAGES.agencies = (root) => {
     setHead('Agencies', 'Agencies, grants and aid');
-    root.append(card(D.agencies.length ? D.agencies.map((a) => h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, a.name), h('small', {}, [a.type, a.programme].filter(Boolean).join(' · '))))) : h('p', { class: 'muted' }, 'No agencies yet.')));
-    root.append(sec('Grants and aid received'));
-    root.append(card(D.grants.map((g) => {
-      const recs = D.receipts.filter((r) => r.grant_id === g.id);
-      const used = D.uses.filter((u) => recs.some((r) => r.id === u.receipt_id) && u.batch_id).map((u) => D.batches.find((b) => b.id === u.batch_id)?.no).filter(Boolean);
-      return h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, `${g.ref} · ${g.title}`),
-        h('small', {}, `${g.quantity || ''}${g.value_note ? ' · ' + g.value_note : ''}${g.conditions ? ' · Conditions: ' + g.conditions : ''}`),
-        used.length ? h('small', {}, 'Planted in Peringkat ' + [...new Set(used)].sort((a, b) => a - b).join(', ')) : null), pill(g.status, 'green'));
-    })));
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => agencyForm(null) }, '+ Add an agency'));
+    root.append(card(D.agencies.length ? D.agencies.map((a) => {
+      const req = D.areq.filter((r) => r.agency_id === a.id);
+      return linkRow('#agency-' + a.id, a.name, [a.type, a.programme].filter(Boolean).join(' · ') || 'Tap to add details', req.length ? `${req.filter((r) => r.done).length}/${req.length} done` : null);
+    }) : h('p', { class: 'muted' }, 'No agencies yet.')));
+    root.append(sec('Grants and aid received', xpBtn(SPEC.grants, 'Grants and aid')));
+    root.append(card(D.grants.length ? [...D.grants].sort((a, b) => a.ref.localeCompare(b.ref)).map((g) => {
+      const used = [...new Set(grMaterial(g).flatMap(matUses).map((u) => D.batches.find((b) => b.id === u.batch_id)?.no).filter(Boolean))].sort((a, b) => a - b);
+      return linkRow('#grant-' + g.ref, `${g.ref} · ${g.title}`, [agName(g.agency_id), g.quantity, used.length ? 'Peringkat ' + used.join(', ') : ''].filter(Boolean).join(' · '), pill(g.status, g.status === 'Completed' ? 'green' : 'gold'));
+    }) : h('p', { class: 'muted' }, 'No grants yet.')));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => grantForm(null) }, '+ Record grant or aid'));
     root.append(sec('Planting material received', xpBtn(SPEC.material, 'Planting material')));
     const tot = D.receipts.reduce((s, r) => s + r.qty, 0);
     root.append(h('div', { class: 'card table' },
       h('div', { class: 'mrow ghead' }, h('span', {}, 'Ref · from'), h('span', {}, 'How'), h('span', { class: 'num' }, 'Qty')),
-      D.receipts.map((r) => h('div', { class: 'mrow' }, h('span', {}, h('b', {}, r.ref), h('small', {}, `${r.source} · ${r.type}${r.received_on ? ' · ' + dstr(r.received_on) : ''}`)), h('span', {}, r.how), h('span', { class: 'num' }, fmt(r.qty)))),
+      [...D.receipts].sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => h('a', { class: 'mrow', href: '#mat-' + r.ref }, h('span', {}, h('b', {}, r.ref), h('small', {}, `${r.source} · ${r.type}${r.received_on ? ' · ' + dstr(r.received_on) : ''}`)), h('span', {}, r.how), h('span', { class: 'num' }, fmt(r.qty)))),
       h('div', { class: 'mrow total' }, h('span', {}, 'Total'), h('span', {}), h('span', { class: 'num' }, fmt(tot)))));
-    root.append(h('p', { class: 'muted small foot' }, 'Adding agencies and recording new grants comes in a later stage.'));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => matForm(null) }, '+ Record planting material received'));
+  };
+
+  function agencyForm(a) {
+    openSheet(a ? `Edit ${a.name}` : 'Add an agency', [
+      { key: 'name', label: 'Name', required: true, value: a?.name, ph: 'e.g. LPNM (Lembaga Perindustrian Nanas Malaysia)' },
+      { key: 'type', label: 'Type', type: 'select', value: a?.type || AG_TYPES[0], options: AG_TYPES.map((t) => [t, t]), half: true },
+      { key: 'programme', label: 'Programme or scheme', value: a?.programme, ph: 'e.g. Free suckers', half: true },
+      { type: 'head', label: 'Contact' },
+      { key: 'officer', label: 'Officer', value: a?.officer, half: true },
+      { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: a?.phone, half: true },
+      { key: 'email', label: 'Email', type: 'email', mode: 'email', value: a?.email },
+      { key: 'website', label: 'Website', value: a?.website, ph: 'e.g. www.mpib.gov.my' },
+      { key: 'address', label: 'Address', type: 'textarea', value: a?.address }
+    ], async (v) => {
+      const id = a?.id || uuid();
+      const { error } = a ? await sb.from('agencies').update(v).eq('id', a.id) : await sb.from('agencies').insert({ ...v, id, plantation_id: D.plantation.id });
+      if (error) throw error;
+      await refresh('Agency saved');
+      location.hash = '#agency-' + id;
+    });
+  }
+
+  PAGES.agency = (root, id) => {
+    const a = D.agencies.find((x) => x.id === id);
+    if (!a) { location.hash = '#agencies'; return; }
+    setHead(a.name, [a.type, a.programme].filter(Boolean).join(' · '), ['Agencies', '#agencies']);
+    const web = a.website ? (/^https?:\/\//.test(a.website) ? a.website : 'https://' + a.website) : null;
+    root.append(h('div', { class: 'card kvs' }, kv('Officer', a.officer), kv('Phone', a.phone ? h('a', { href: 'tel:' + a.phone.replace(/\s/g, '') }, a.phone) : ''),
+      kv('Email', a.email ? h('a', { href: 'mailto:' + a.email }, a.email) : '', true), kv('Website', web ? h('a', { href: web, target: '_blank', rel: 'noopener' }, a.website) : '', true), kv('Address', a.address, true)));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => agencyForm(a) }, 'Edit agency details'));
+    const reqs = D.areq.filter((r) => r.agency_id === a.id).sort((x, y) => (x.sort || 0) - (y.sort || 0));
+    root.append(sec(`What they require (${reqs.filter((r) => r.done).length}/${reqs.length} done)`));
+    root.append(card(reqs.length ? reqs.map((r) => h('div', { class: 'trow req' },
+      h('button', { type: 'button', class: 'check' + (r.done ? ' on' : ''), role: 'checkbox', 'aria-checked': String(r.done), 'aria-label': r.text, onclick: async () => {
+        const nv = !r.done; const { error } = await sb.from('agency_requirements').update({ done: nv }).eq('id', r.id); if (error) return toast(friendly(error)); r.done = nv; saveSnap(); route(); } }, r.done ? '✓' : ''),
+      h('span', { class: 'lmain' + (r.done ? ' done' : '') }, r.text),
+      h('button', { type: 'button', class: 'x', 'aria-label': 'Remove', onclick: async () => { if (!window.confirm('Remove this item?')) return; const { error } = await sb.from('agency_requirements').delete().eq('id', r.id); if (error) return toast(friendly(error)); await refresh('Removed'); } }, '×'))) : h('p', { class: 'muted' }, 'Nothing listed yet, e.g. "Registered as a grower", "Copy of land lease".'),
+      h('button', { class: 'btn link', type: 'button', onclick: () => openSheet('Add a requirement', [{ key: 'text', label: 'What they require', required: true, ph: 'e.g. Registered as a grower with LPNM' }], async (v) => {
+        const { error } = await sb.from('agency_requirements').insert({ id: uuid(), agency_id: a.id, plantation_id: D.plantation.id, text: v.text, sort: reqs.length + 1 }); if (error) throw error; await refresh('Added'); }, 'Add') }, '+ Add a requirement')));
+    const gs = D.grants.filter((g) => g.agency_id === a.id);
+    root.append(sec('Grants and aid from this agency'));
+    root.append(card(gs.length ? gs.map((g) => linkRow('#grant-' + g.ref, `${g.ref} · ${g.title}`, g.quantity || '', pill(g.status, g.status === 'Completed' ? 'green' : 'gold'))) : h('p', { class: 'muted' }, 'None yet.'),
+      h('button', { class: 'btn link', type: 'button', onclick: () => grantForm(null, a.id) }, '+ Record grant or aid')));
+    root.append(attachBox('agency', a.id, 'Documents and letters'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => {
+      if (gs.length) return toast('This agency has grants recorded, so it can\'t be deleted.');
+      openSheet(`Delete ${a.name}?`, [{ type: 'note', label: 'The agency and its checklist are removed.' }], async () => { const { error } = await sb.from('agencies').delete().eq('id', a.id); if (error) throw error; location.hash = '#agencies'; await refresh('Agency deleted'); }, 'Delete', true);
+    } }, 'Delete this agency'));
+  };
+
+  function grantForm(g, agencyId) {
+    openSheet(g ? `Edit ${g.ref}` : 'Record grant or aid', [
+      { key: 'title', label: 'What it is', required: true, value: g?.title, ph: 'e.g. LPNM free suckers' },
+      { key: 'agency_id', label: 'From', type: 'select', value: g?.agency_id || agencyId || D.agencies[0]?.id || '', options: [['', '— not from a listed agency —'], ...D.agencies.map((a) => [a.id, a.name])] },
+      { key: 'status', label: 'Status', type: 'select', value: g?.status || 'Applied', options: GR_STEPS.map((s) => [s, s]), half: true },
+      { key: 'applied_on', label: 'Applied on', type: 'date', value: g?.applied_on, half: true },
+      { key: 'approved_on', label: 'Approved on', type: 'date', value: g?.approved_on, half: true },
+      { key: 'quantity', label: 'Quantity', value: g?.quantity, ph: 'e.g. 34,000 sulur', half: true },
+      { key: 'value_note', label: 'Value or cost to us', value: g?.value_note, ph: 'e.g. Free, no charge / RM 5,000 subsidy' },
+      { key: 'conditions', label: 'Conditions and reporting', type: 'textarea', value: g?.conditions, ph: 'e.g. Report planting progress to the officer every 6 months' }
+    ], async (v) => {
+      v.agency_id = v.agency_id || null;
+      const ref = g?.ref || nextRef('GR-', D.grants);
+      const { error } = g ? await sb.from('grants').update(v).eq('id', g.id) : await sb.from('grants').insert({ ...v, id: uuid(), ref, plantation_id: D.plantation.id });
+      if (error) throw error;
+      await refresh(g ? 'Grant saved' : `Grant ${ref} recorded`);
+      location.hash = '#grant-' + ref;
+    });
+  }
+
+  PAGES.grant = (root, ref) => {
+    const g = D.grants.find((x) => x.ref === ref);
+    if (!g) { location.hash = '#agencies'; return; }
+    setHead(`${g.ref} · ${g.title}`, g.status, ['Agencies', '#agencies']);
+    const at = GR_STEPS.indexOf(g.status);
+    root.append(h('div', { class: 'card' }, h('div', { class: 'steps' }, GR_STEPS.map((s, i) => h('button', { type: 'button', class: 'step' + (i <= at ? ' on' : ''), 'aria-label': `Set status to ${s}`, onclick: async () => {
+      if (s === g.status) return; const { error } = await sb.from('grants').update({ status: s }).eq('id', g.id); if (error) return toast(friendly(error)); await refresh(`${g.ref} is now ${s}`); } }, h('i'), h('span', {}, s)))),
+      h('p', { class: 'muted small' }, 'Tap a step to update the status.')));
+    const mats = grMaterial(g);
+    const dates = mats.map((r) => r.received_on).filter(Boolean).sort();
+    root.append(h('div', { class: 'card kvs' }, kv('Agency', g.agency_id ? h('a', { href: '#agency-' + g.agency_id }, agName(g.agency_id)) : '', true),
+      kv('Applied', dstr(g.applied_on)), kv('Approved', dstr(g.approved_on)),
+      kv('Received', dates.length ? `${dstr(dates[0])}${dates.length > 1 ? ' – ' + dstr(dates[dates.length - 1]) : ''} · ${mats.length} deliver${mats.length > 1 ? 'ies' : 'y'}` : ''),
+      kv('Quantity', g.quantity), kv('Value or cost to us', g.value_note, true), kv('Conditions', g.conditions, true)));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => grantForm(g) }, 'Edit grant details'));
+    root.append(sec(`Deliveries and where they went (${mats.length})`, xpBtn(() => SPEC.material(mats, `${g.ref} · ${g.title}: deliveries`), g.ref)));
+    root.append(card(mats.length ? mats.map((r) => linkRow('#mat-' + r.ref, `${r.ref} · ${fmt(r.qty)} ${r.type.toLowerCase()}`, `${r.received_on ? dstr(r.received_on) : 'date not entered'} · ${usesText(r) || 'not linked to a peringkat yet'}`)) : h('p', { class: 'muted' }, 'No deliveries recorded yet.'),
+      h('button', { class: 'btn link', type: 'button', onclick: () => matForm(null, g) }, '+ Record a delivery')));
+    root.append(attachBox('grant', g.id, 'Letters, forms and photos'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => {
+      if (mats.length) return toast('This grant has deliveries recorded, so it can\'t be deleted.');
+      openSheet(`Delete ${g.ref}?`, [{ type: 'note', label: 'The grant record is removed.' }], async () => { const { error } = await sb.from('grants').delete().eq('id', g.id); if (error) throw error; location.hash = '#agencies'; await refresh('Grant deleted'); }, 'Delete', true);
+    } }, 'Delete this grant'));
+  };
+
+  const usesText = (r) => matUses(r).map((u) => `${u.batch_id ? 'P' + (D.batches.find((b) => b.id === u.batch_id)?.no ?? '?') : '—'} ${u.use === 'Sulam' ? 'sulam ' : ''}${fmt(u.qty)}`).join(', ');
+
+  function matForm(r, grant) {
+    const fromGrant = grant || (r?.grant_id ? D.grants.find((g) => g.id === r.grant_id) : null);
+    openSheet(r ? `Edit ${r.ref}` : 'Planting material received', [
+      { key: 'received_on', label: 'Received on', type: 'date', value: r ? r.received_on : today(), half: true },
+      { key: 'qty', label: 'Quantity', type: 'number', mode: 'numeric', required: true, value: r?.qty, half: true },
+      { key: 'type', label: 'Type', type: 'select', value: r?.type || 'Sulur', options: [['Sulur', 'Sulur (suckers)'], ['Jambul', 'Jambul (crowns)']], half: true },
+      { key: 'how', label: 'How we got it', type: 'select', value: r?.how || (fromGrant ? 'Grant' : 'Bought'), options: [['Bought', 'Bought'], ['Grant', 'Grant or aid'], ['Free', 'Free']], half: true },
+      { key: 'grant_id', label: 'Which grant', type: 'select', value: fromGrant?.id || '', options: [['', '—'], ...D.grants.map((g) => [g.id, `${g.ref} · ${g.title}`])], showIf: (x) => x.how === 'Grant' },
+      { key: 'source', label: 'From (seller or agency)', required: true, value: r?.source || (fromGrant ? agName(fromGrant.agency_id).split(' (')[0] : ''), ph: 'e.g. Hj. Mahmud' },
+      { key: 'notes', label: 'Notes', type: 'textarea', value: r?.notes },
+      { type: 'note', label: r ? 'Where it was planted is set on the next screen.' : 'Next, record which peringkat it went to. If it was bought, also add the cost in Finance.' }
+    ], async (v) => {
+      if (!(v.qty > 0)) throw new Error('Quantity must be more than 0.');
+      v.qty = Math.round(v.qty); v.grant_id = v.how === 'Grant' ? (v.grant_id || null) : null;
+      const ref = r?.ref || nextBT();
+      const { error } = r ? await sb.from('material_receipts').update(v).eq('id', r.id) : await sb.from('material_receipts').insert({ ...v, id: uuid(), ref, plantation_id: D.plantation.id });
+      if (error) throw error;
+      await refresh(r ? 'Saved' : `${ref} recorded`);
+      location.hash = '#mat-' + ref;
+    });
+  }
+
+  PAGES.mat = (root, ref) => {
+    const r = D.receipts.find((x) => x.ref === ref);
+    if (!r) { location.hash = '#agencies'; return; }
+    const g = r.grant_id ? D.grants.find((x) => x.id === r.grant_id) : null;
+    setHead(`${r.ref} · ${fmt(r.qty)} ${r.type.toLowerCase()}`, `${r.how} · ${r.source}`, g ? [g.ref, '#grant-' + g.ref] : ['Agencies', '#agencies']);
+    root.append(h('div', { class: 'card kvs' }, kv('Received', dstr(r.received_on)), kv('Quantity', `${fmt(r.qty)} ${r.type === 'Sulur' ? 'sulur (suckers)' : 'jambul (crowns)'}`),
+      kv('How', r.how), kv('From', r.source), g ? kv('Grant', h('a', { href: '#grant-' + g.ref }, `${g.ref} · ${g.title}`), true) : null, kv('Notes', r.notes, true)));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => matForm(r) }, 'Edit'));
+    const us = matUses(r);
+    const used = us.reduce((s, u) => s + u.qty, 0);
+    root.append(sec(`Where it went (${fmt(used)} of ${fmt(r.qty)})`));
+    root.append(card(us.length ? us.map((u) => { const b = D.batches.find((x) => x.id === u.batch_id);
+      return h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, b ? b.name : 'No peringkat'), h('small', {}, u.use === 'Sulam' ? 'Sulam (replacing dead plants)' : 'Planting')), h('span', { class: 'lright' }, fmt(u.qty)),
+        h('button', { type: 'button', class: 'x', 'aria-label': 'Remove', onclick: async () => { if (!window.confirm('Remove this line?')) return; const { error } = await sb.from('material_uses').delete().eq('id', u.id); if (error) return toast(friendly(error)); await refresh('Removed'); } }, '×')); })
+      : h('p', { class: 'muted' }, 'Not linked to a peringkat yet.'),
+      used < r.qty ? h('button', { class: 'btn link', type: 'button', onclick: () => openSheet('Where it went', [
+        { key: 'batch_id', label: 'Peringkat', type: 'select', value: D.batches[0]?.id, options: [...D.batches].sort((a, b) => a.no - b.no).map((b) => [b.id, b.name]) },
+        { key: 'use', label: 'Used for', type: 'select', value: 'Planting', options: [['Planting', 'Planting'], ['Sulam', 'Sulam (replacing dead plants)']], half: true },
+        { key: 'qty', label: 'How many', type: 'number', mode: 'numeric', required: true, value: r.qty - used, half: true }
+      ], async (v) => {
+        if (!(v.qty > 0)) throw new Error('How many must be more than 0.');
+        if (used + v.qty > r.qty) throw new Error(`Only ${fmt(r.qty - used)} left from this delivery.`);
+        const { error } = await sb.from('material_uses').insert({ id: uuid(), receipt_id: r.id, plantation_id: D.plantation.id, batch_id: v.batch_id, use: v.use, qty: Math.round(v.qty) }); if (error) throw error;
+        await refresh('Saved');
+      }, 'Add') }, '+ Add where it went') : null));
+    root.append(attachBox('material', r.id, 'Delivery note and photos'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${r.ref}?`, [{ type: 'note', label: 'The delivery and where it went are removed.' }], async () => {
+      const { error } = await sb.from('material_receipts').delete().eq('id', r.id); if (error) throw error; location.hash = g ? '#grant-' + g.ref : '#agencies'; await refresh('Deleted'); }, 'Delete', true) }, 'Delete this record'));
   };
 
   // ---------- Settings ----------
@@ -2098,9 +2256,11 @@
       return { title: 'Capital, profit and shares', sheet: 'Finance', sub: `Capital ${rm(M.pool)} · costs ${rm(M.spent)} · sales ${rm(M.sales)} · ${M.profit < 0 ? 'loss' : 'profit'} ${rm(Math.abs(M.profit))} · cash left about ${rm(M.cash)}`,
         cols: [{ h: 'Partner', t: 'text' }, { h: 'Capital (RM)', t: 'money' }, { h: 'Share %', t: 'money' }, { h: M.profit < 0 ? 'Share of loss (RM)' : 'Share of profit (RM)', t: 'money', w: 18 }],
         rows: act.map((m) => { const sh = M.pool ? Number(m.capital || 0) / M.pool : 0; return [m.display_name, Number(m.capital || 0), sh * 100, Math.abs(M.profit) * sh]; }), foot: ['Total', M.pool, M.pool ? 100 : 0, Math.abs(M.profit)] }; },
-    material: () => ({ title: 'Planting material received', sheet: 'Planting material', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Received', t: 'text', w: 14 }, { h: 'From', t: 'text', w: 24 }, { h: 'How', t: 'text', w: 9 }, { h: 'Type', t: 'text', w: 9 }, { h: 'Used for', t: 'text', w: 18 }, { h: 'Qty', t: 'int' }],
-      rows: D.receipts.map((r) => [r.ref, dstr(r.received_on), r.source, r.how, r.type, D.uses.filter((u) => u.receipt_id === r.id).map((u) => u.batch_id ? 'P' + (D.batches.find((b) => b.id === u.batch_id)?.no) : u.use).join(', '), r.qty]),
-      foot: ['Total', '', '', '', '', '', D.receipts.reduce((s, r) => s + r.qty, 0)] }),
+    material: (list = D.receipts, title = 'Planting material received') => ({ title, sheet: 'Planting material', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Received', t: 'text', w: 14 }, { h: 'From', t: 'text', w: 24 }, { h: 'How', t: 'text', w: 9 }, { h: 'Type', t: 'text', w: 9 }, { h: 'Used for', t: 'text', w: 18 }, { h: 'Qty', t: 'int' }],
+      rows: [...list].sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => [r.ref, dstr(r.received_on), r.source, r.how, r.type, D.uses.filter((u) => u.receipt_id === r.id).map((u) => u.batch_id ? 'P' + (D.batches.find((b) => b.id === u.batch_id)?.no) : u.use).join(', '), r.qty]),
+      foot: ['Total', '', '', '', '', '', list.reduce((s, r) => s + r.qty, 0)] }),
+    grants: () => ({ title: 'Grants and aid received', sheet: 'Grants', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'What', t: 'text', w: 26 }, { h: 'Agency', t: 'text', w: 26 }, { h: 'Status', t: 'text', w: 11 }, { h: 'Applied', t: 'text', w: 13 }, { h: 'Approved', t: 'text', w: 13 }, { h: 'Quantity', t: 'text', w: 18 }, { h: 'Value or cost', t: 'text', w: 20 }, { h: 'Conditions', t: 'text', w: 30 }, { h: 'Deliveries', t: 'int' }, { h: 'Received (qty)', t: 'int' }],
+      rows: [...D.grants].sort((a, b) => a.ref.localeCompare(b.ref)).map((g) => [g.ref, g.title, agName(g.agency_id), g.status, dstr(g.applied_on), dstr(g.approved_on), g.quantity || '', g.value_note || '', g.conditions || '', grMaterial(g).length, grMaterial(g).reduce((s, r) => s + r.qty, 0)]) }),
     alerts: () => ({ title: 'Urgent alerts', sheet: 'Alerts', cols: [{ h: 'Ref', t: 'text', w: 8 }, { h: 'Reported', t: 'text', w: 16 }, { h: 'Type', t: 'text', w: 22 }, { h: 'Where', t: 'text', w: 16 }, { h: 'Urgency', t: 'text', w: 10 }, { h: 'Status', t: 'text', w: 12 }, { h: 'What happened', t: 'text', w: 30 }, { h: 'Actions', t: 'text', w: 40 }],
       rows: [...D.alerts].sort((a, b) => a.ref.localeCompare(b.ref)).map((a) => [a.ref, `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, a.type, a.location || '', a.urgency, a.status, a.description || '', alActions(a).map((x) => `${memberName(x.member_id)}: ${x.action}`).join(' | ')]) }),
     marks: () => { const cols = mapLayout(); const ms = [...(D.marks || [])].sort(byMade);
@@ -2108,7 +2268,7 @@
         cols: [{ h: 'No.', t: 'int' }, { h: 'Type', t: 'text', w: 9 }, { h: 'Note', t: 'text', w: 36 }, { h: 'Where', t: 'text', w: 26 }, { h: 'Added by', t: 'text', w: 14 }, { h: 'Added', t: 'text', w: 12 }, { h: 'GPS', t: 'text', w: 22 }],
         rows: ms.map((m, i) => [i + 1, m.type, m.note || '', markWhere(m, cols), m.created_by ? memberName(m.created_by) : '', m.created_at ? dstr(String(m.created_at).slice(0, 10)) : '', m.lat != null ? `${m.lat}, ${m.lng}` : '']) }; }
   };
-  const fullReport = () => [SPEC.finance(), SPEC.spend(), SPEC.keyDates(), SPEC.contractors(), SPEC.jobs(sortJobs(D.jobs)), SPEC.payments(D.pays), SPEC.buyers(), SPEC.picks(sortPicks(D.picks)), SPEC.receipts(D.rcs), SPEC.partnersExp(), SPEC.expenses(sortEx(D.expenses)), SPEC.claims(D.claims), SPEC.purchases(), SPEC.material(), SPEC.alerts(), SPEC.marks()];
+  const fullReport = () => [SPEC.finance(), SPEC.spend(), SPEC.keyDates(), SPEC.contractors(), SPEC.jobs(sortJobs(D.jobs)), SPEC.payments(D.pays), SPEC.buyers(), SPEC.picks(sortPicks(D.picks)), SPEC.receipts(D.rcs), SPEC.partnersExp(), SPEC.expenses(sortEx(D.expenses)), SPEC.claims(D.claims), SPEC.purchases(), SPEC.grants(), SPEC.material(), SPEC.alerts(), SPEC.marks()];
 
   // ---------- Reports page ----------
   async function reloadReports() { const { data } = await sb.from('reports').select('*').eq('plantation_id', D.plantation.id).order('created_at', { ascending: false }); if (data) D.reports = data; if (location.hash === '#reports' && $('sheet-wrap').hidden) route(); }
