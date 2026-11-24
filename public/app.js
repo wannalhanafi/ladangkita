@@ -148,7 +148,7 @@
     const me = mine.data[0];
     const p = me.plantation_id;
     const q = (t, sel = '*') => sb.from(t).select(sel).eq('plantation_id', p);
-    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings] = await Promise.all([
+    const [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp] = await Promise.all([
       sb.from('plantations').select('*').eq('id', p).single(),
       q('members').order('created_at'),
       q('member_private'),
@@ -167,9 +167,14 @@
       q('contractor_payments').order('ref'),
       q('payment_jobs'),
       q('attachments').order('created_at'),
-      sb.from('settings').select('*').eq('plantation_id', p).maybeSingle()
+      sb.from('settings').select('*').eq('plantation_id', p).maybeSingle(),
+      q('buyers').order('name'),
+      q('harvest_picks'),
+      q('pick_batches'),
+      q('buyer_receipts').order('ref'),
+      q('receipt_picks')
     ]);
-    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings];
+    const all = [pl, members, priv, blocks, batches, bb, jobs, jb, receipts, uses, grants, agencies, alerts, cats, contractors, pays, pj, atts, settings, buyers, picks, pkb, rcs, rp];
     const bad = all.find((r) => r.error);
     if (bad) throw bad.error;
     return {
@@ -177,7 +182,8 @@
       members: members.data, priv: Object.fromEntries(priv.data.map((r) => [r.member_id, r])),
       blocks: blocks.data, batches: batches.data, bb: bb.data, jobs: jobs.data, jb: jb.data,
       receipts: receipts.data, uses: uses.data, grants: grants.data, agencies: agencies.data, alerts: alerts.data,
-      cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {}
+      cats: cats.data, contractors: contractors.data, pays: pays.data, pj: pj.data, atts: atts.data, settings: settings.data || {},
+      buyers: buyers.data, picks: picks.data, pkb: pkb.data, rcs: rcs.data, rp: rp.data
     };
   }
 
@@ -205,7 +211,7 @@
     const hash = decodeURIComponent(location.hash.slice(1));
     const [name, arg] = hash.split(/-(.+)/);
     const page = PAGES[name] || PAGES.home;
-    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs' }[name] || '';
+    const tab = TABS[name] || { p: 'status', job: 'jobs', pay: 'jobs', pick: 'sales', rc: 'sales' }[name] || '';
     for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.tab === tab);
     const root = $('v-app');
     root.replaceChildren();
@@ -235,13 +241,13 @@
     const f = $('sheet');
     f.replaceChildren();
     f.append(h('div', { class: 'h sheet-title' }, title));
-    const inputs = {}, wraps = [];
+    const inputs = {}, wraps = [], renders = [];
     const raw = () => Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.getVal ? el.getVal() : el.value]));
     for (const fd of fields) {
       let wrap;
       if (fd.type === 'head') wrap = h('div', { class: 'h sheet-head' }, fd.label);
       else if (fd.type === 'note') wrap = h('div', { class: 'note-box' }, fd.label);
-      else if (fd.type === 'info') wrap = fd.node;
+      else if (fd.type === 'info') { wrap = fd.node || h('div', {}); if (fd.render) renders.push([fd, wrap]); }
       else {
         const id = 'f_' + fd.key;
         let input;
@@ -256,14 +262,14 @@
         else input = h('input', { id, type: fd.type || 'text', inputmode: fd.mode, placeholder: fd.ph || '', autocomplete: 'off', list: fd.list ? id + '_l' : null, step: fd.type === 'number' ? 'any' : null });
         if (!['select', 'chips'].includes(fd.type)) input.value = fd.value ?? '';
         inputs[fd.key] = input;
-        wrap = h(fd.type === 'chips' ? 'div' : 'label', { class: 'field', for: fd.type === 'chips' ? null : id }, h('span', {}, fd.label, fd.required ? ' *' : ''), input,
+        wrap = h(fd.type === 'chips' ? 'div' : 'label', { class: 'field' + (fd.half ? ' half' : ''), for: fd.type === 'chips' ? null : id }, h('span', {}, fd.label, fd.required ? ' *' : ''), input,
           fd.list ? h('datalist', { id: id + '_l' }, fd.list.map((v) => h('option', { value: v }))) : null,
           fd.note ? h('small', {}, fd.note) : null);
       }
       if (fd.showIf) wraps.push([fd, wrap]);
       f.append(wrap);
     }
-    function update() { const r = raw(); for (const [fd, w] of wraps) w.hidden = !fd.showIf(r); }
+    function update() { const r = raw(); for (const [fd, w] of wraps) w.hidden = !fd.showIf(r); for (const [fd, w] of renders) w.replaceChildren(fd.render(r)); }
     f.oninput = update; f.onchange = update; update();
     const err = h('p', { class: 'err', role: 'alert', hidden: true });
     const save = h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), type: 'submit' }, saveLabel);
@@ -324,10 +330,12 @@
     const plants = D.batches.reduce((s, b) => s + b.plants, 0);
     const toEnter = D.jobs.filter((j) => DONE.includes(j.status) && (j.price == null || !j.contractor_id)).length;
     const toPay = D.jobs.filter((j) => j.status === 'To pay').reduce((s, j) => s + Number(j.price || 0), 0);
+    const owed = D.picks.filter((k) => !pickRc(k)).reduce((s, k) => s + pickAmt(k), 0);
     root.append(h('div', { class: 'kpis' },
       kpi('Plants', fmt(plants), `${D.batches.length} peringkat`, '#status'),
       kpi('Area', `${Number(D.plantation.area_acres || 0).toFixed(2)} ac`, `${D.blocks.length} blok`, '#status'),
-      kpi('Partners', fmt(D.members.filter((m) => m.active).length), D.isAdmin ? 'Tap to add' : 'In this plantation', '#partners'),
+      D.picks.length ? kpi('Sales', rm(D.picks.reduce((s, k) => s + pickAmt(k), 0)), owed ? `Buyers owe ${rm(owed)}` : 'All paid', '#sales')
+        : kpi('Partners', fmt(D.members.filter((m) => m.active).length), D.isAdmin ? 'Tap to add' : 'In this plantation', '#partners'),
       toPay ? kpi('To pay contractors', rm(toPay), `${D.jobs.filter((j) => j.status === 'To pay').length} jobs done`, '#jobs')
         : kpi('Jobs', fmt(D.jobs.length), toEnter ? `${toEnter} need contractor and cost` : 'All costs entered', toEnter ? '#jobs-none' : '#jobs')));
     const upcoming = D.jobs.filter((j) => ['Planned', 'Quoted', 'In progress'].includes(j.status));
@@ -338,7 +346,7 @@
     }) : h('p', { class: 'muted' }, 'Nothing planned yet.')));
     root.append(h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs and contractor payments'));
     if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
-    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Sales, Expense, Finance and Map are coming next. Everything you see here is your real plantation data.')));
+    root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Expense, Finance and Map are coming next. Everything you see here is your real plantation data.')));
   };
   const kpi = (l, v, sub, href) => h('a', { class: 'kpi', href }, h('div', { class: 'l' }, l), h('div', { class: 'v' }, v), sub ? h('div', { class: 's' }, sub) : null);
 
@@ -413,6 +421,11 @@
         h('span', { class: 'lright' }, j.price != null ? h('span', {}, rm(j.price), h('small', { class: 'st' }, j.status)) : done ? pill('Cost to enter', 'amber') : pill(j.status, 'gold')));
     }) : h('p', { class: 'muted' }, 'No work recorded yet.')));
     root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => jobForm(null, { batches: [b.id] }) }, '+ Record a job for this peringkat'));
+    const picks = sortPicks(D.picks.filter((k) => D.pkb.some((x) => x.pick_id === k.id && x.batch_id === b.id)));
+    root.append(sec('Harvest'));
+    root.append(card(picks.length ? picks.map((k) => linkRow('#pick-' + k.ref, `${k.ref} · ${fmt(pickFruit(k))} fruit`, `${dstr(k.picked_on)}${pickWho(k) ? ' · ' + pickWho(k) : ''}${pickBatches(k).length > 1 ? ' · shared with ' + pickPlots(k) : ''}`, rm(pickAmt(k))))
+      : h('p', { class: 'muted' }, 'No harvest picked from this peringkat yet.')));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => pickForm(null, { batches: [b.id] }) }, '+ Record a harvest pick'));
   };
 
   function editBatch(b) {
@@ -924,12 +937,240 @@
     return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not read the photo'))), 'image/jpeg', 0.82));
   }
 
+  // ================= SALES: HARVEST PICKS AND MONEY FROM BUYERS (Stage 3) =================
+  const money2 = (n) => Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pickFruit = (k) => Number(k.grade_a || 0) + Number(k.grade_b || 0) + Number(k.grade_c || 0);
+  const pickAmt = (k) => Number(k.grade_a || 0) * Number(k.price_a || 0) + Number(k.grade_b || 0) * Number(k.price_b || 0) + Number(k.grade_c || 0) * Number(k.price_c || 0);
+  const pickBatches = (k) => D.pkb.filter((x) => x.pick_id === k.id).map((x) => D.batches.find((b) => b.id === x.batch_id)).filter(Boolean).sort((a, b) => a.no - b.no);
+  const pickPlots = (k) => { const bs = pickBatches(k); return bs.length ? bs.map((b) => 'P' + b.no).join(', ') : 'No peringkat'; };
+  const pickRc = (k) => { const l = D.rp.find((x) => x.pick_id === k.id); return l ? D.rcs.find((r) => r.id === l.receipt_id) : null; };
+  const pickWho = (k) => D.buyers.find((b) => b.id === k.buyer_id)?.name || k.buyer_name || null;
+  const sortPicks = (list) => [...list].sort((a, b) => String(b.picked_on).localeCompare(String(a.picked_on)) || b.ref.localeCompare(a.ref));
+
+  PAGES.sales = (root, arg) => {
+    const bid = arg && arg.startsWith('b-') ? arg.slice(2) : null;
+    const buyer = bid ? D.buyers.find((b) => b.id === bid) : null;
+    if (bid && !buyer) { location.hash = '#sales'; return; }
+    const list = sortPicks(D.picks.filter((k) => (bid ? k.buyer_id === bid : true)));
+    if (buyer) setHead(buyer.name, 'Buyer · harvest picks and payments', ['All buyers', '#sales']);
+    else setHead('Sales', 'Harvest picks and money from buyers');
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => pickForm(null, { buyer: buyer?.name }) }, '+ Record a harvest pick'));
+
+    const sumOf = (ks) => ({ fruit: ks.reduce((s, k) => s + pickFruit(k), 0), sold: ks.reduce((s, k) => s + pickAmt(k), 0), owes: ks.filter((k) => !pickRc(k)).reduce((s, k) => s + pickAmt(k), 0), recv: ks.filter((k) => pickRc(k)).reduce((s, k) => s + pickAmt(k), 0) });
+    const tot = sumOf(list);
+    if (!buyer) {
+      root.append(h('div', { class: 'card sales-top' },
+        D.picks.length ? [h('small', { class: 'muted' }, `${D.picks.length} pick${D.picks.length > 1 ? 's' : ''} recorded`), h('div', { class: 'h big' }, `${fmt(tot.fruit)} fruit picked`), h('div', {}, `Sold ${rm(tot.sold)} · buyers owe ${rm(tot.owes)}`)]
+          : [h('div', { class: 'h big' }, 'No harvest yet'), h('small', { class: 'muted' }, 'Record each pick here: fruit by grade, the price per fruit that day, and who bought it.')]));
+      if (D.buyers.length || D.picks.length) {
+        root.append(sec('Summary by buyer'));
+        const rows = D.buyers.map((b) => ({ name: b.name, href: '#sales-b-' + b.id, x: sumOf(D.picks.filter((k) => k.buyer_id === b.id)) }));
+        root.append(h('div', { class: 'card table' },
+          h('div', { class: 'srow ghead' }, h('span', {}, 'Buyer'), h('span', { class: 'num' }, 'Fruit'), h('span', { class: 'num' }, 'Buyer owes'), h('span', { class: 'num' }, 'Received')),
+          rows.map((r) => h('a', { class: 'srow', href: r.href }, h('span', { class: 'lk' }, r.name), h('span', { class: 'num' }, r.x.fruit ? fmt(r.x.fruit) : '—'), h('span', { class: 'num red-t' }, r.x.owes ? rm(r.x.owes) : '—'), h('span', { class: 'num green-t' }, r.x.recv ? rm(r.x.recv) : '—'))),
+          h('div', { class: 'srow total' }, h('span', {}, 'Total'), h('span', { class: 'num' }, fmt(tot.fruit)), h('span', { class: 'num red-t' }, rm(tot.owes)), h('span', { class: 'num green-t' }, rm(tot.recv)))));
+        if (tot.owes > 0) root.append(h('p', { class: 'muted small foot' }, 'When a buyer pays, tap their name above, tick the picks, then tap Record payment.'));
+      }
+    } else {
+      root.append(h('div', { class: 'tiles' },
+        h('div', { class: 'tile' }, h('small', {}, 'Sold'), h('div', { class: 'h' }, rm(tot.sold))),
+        h('div', { class: 'tile' }, h('small', {}, 'Buyer owes'), h('div', { class: 'h' }, rm(tot.owes))),
+        h('div', { class: 'tile' }, h('small', {}, 'Received'), h('div', { class: 'h' }, rm(tot.recv)))));
+      root.append(h('div', { class: 'card kvs' }, kv('Phone', buyer.phone), kv('Payment terms', buyer.payment_terms), kv('Grades bought', buyer.grades_bought, true), buyer.address ? kv('Address', buyer.address, true) : null,
+        h('div', { class: 'kv wide' }, h('button', { class: 'btn small-btn', type: 'button', onclick: () => buyerForm(buyer) }, 'Edit buyer details'))));
+      const unused = !list.length && !D.rcs.some((r) => r.buyer_id === bid);
+      if (D.isAdmin && unused) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${buyer.name}?`, [{ type: 'note', label: 'This buyer has no picks or payments, so it can be removed from your list.' }], async () => {
+        const { error } = await sb.from('buyers').delete().eq('id', bid); if (error) throw error;
+        location.hash = '#sales'; await refresh('Buyer deleted');
+      }, 'Delete buyer', true) }, 'Delete this buyer'));
+    }
+
+    const sel = new Set();
+    const payable = (k) => buyer && !pickRc(k) && pickAmt(k) > 0;
+    const recvBtn = h('button', { class: 'btn primary pay-btn', type: 'button', disabled: true, onclick: () => receiptForm(list.filter((k) => sel.has(k.id))) }, 'Tick picks paid');
+    const drawRecv = () => { const t = list.filter((k) => sel.has(k.id)).reduce((s, k) => s + pickAmt(k), 0); recvBtn.disabled = !sel.size; recvBtn.textContent = sel.size ? `Record payment from ${buyer.name} · ${rm(t)}` : 'Tick picks paid'; };
+    root.append(sec('Harvest picks'));
+    root.append(h('div', { class: 'card table' },
+      h('div', { class: 'jrow ghead' + (buyer ? ' sel' : '') }, buyer ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Pick'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      list.length ? list.map((k) => {
+        const rc = pickRc(k);
+        const box = payable(k) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + k.ref, onchange: (e) => { if (e.target.checked) sel.add(k.id); else sel.delete(k.id); drawRecv(); } }) : null;
+        return h('div', { class: 'jrow' + (buyer ? ' sel' : '') }, buyer ? h('span', { class: 'cb' }, box) : null,
+          h('span', { class: 'd' }, dstr(k.picked_on).replace(/ \d{4}$/, ''), h('small', {}, String(k.picked_on).slice(0, 4))),
+          h('span', {}, h('a', { href: '#pick-' + k.ref }, `${k.ref} · ${fmt(pickFruit(k))} fruit`), h('small', {}, `${pickPlots(k)}${!buyer ? ' · ' + (pickWho(k) || 'buyer to enter') : ''}`)),
+          h('span', { class: 'num' }, money2(pickAmt(k))),
+          h('span', {}, rc ? pill('Received', 'green') : pill('Buyer owes', 'amber'), rc ? h('a', { class: 'pv', href: '#rc-' + rc.ref }, rc.ref) : null));
+      }) : h('p', { class: 'muted' }, 'No harvest picks yet.')));
+    if (buyer && list.some(payable)) root.append(h('div', { class: 'pay-bar' }, recvBtn));
+
+    const rcs = D.rcs.filter((r) => (bid ? r.buyer_id === bid : true)).sort((a, b) => b.ref.localeCompare(a.ref));
+    root.append(sec('Payments received'));
+    root.append(card(rcs.length ? rcs.map((r) => linkRow('#rc-' + r.ref, `${r.ref} · ${rm(r.amount)}`, `${r.buyer_name || ''} · ${dstr(r.received_on)} · ${r.method} · ${r.received_by}`, pill('Received', 'green'))) : h('p', { class: 'muted' }, 'No payments received yet.')));
+  };
+
+  // ---------- one harvest pick ----------
+  PAGES.pick = (root, ref) => {
+    const k = D.picks.find((x) => x.ref === ref);
+    if (!k) { location.hash = '#sales'; return; }
+    const rc = pickRc(k);
+    const who = pickWho(k);
+    setHead(`${k.ref} · ${fmt(pickFruit(k))} fruit`, `${dstr(k.picked_on)} · ${rc ? 'Received' : 'Buyer owes'}`, ['Sales', '#sales']);
+    const g = (name, n, pr) => (n ? [h('span', {}, name), h('span', { class: 'r' }, fmt(n)), h('span', { class: 'r' }, money2(pr)), h('span', { class: 'r' }, money2(n * pr))] : []);
+    root.append(h('div', { class: 'card' }, h('div', { class: 'grades' },
+      h('span', { class: 'gh' }, 'Grade'), h('span', { class: 'gh r' }, 'Fruit'), h('span', { class: 'gh r' }, 'RM each'), h('span', { class: 'gh r' }, 'RM'),
+      g('Grade A', Number(k.grade_a), Number(k.price_a)), g('Grade B', Number(k.grade_b), Number(k.price_b)), g('Grade C', Number(k.grade_c), Number(k.price_c)),
+      h('span', { class: 't' }, 'Total'), h('span', { class: 't r' }, fmt(pickFruit(k))), h('span', { class: 't' }), h('span', { class: 't r' }, rm(pickAmt(k))))));
+    root.append(h('div', { class: 'card kvs' },
+      kv('Peringkat', pickBatches(k).length ? h('span', { class: 'chips' }, pickBatches(k).map((b) => h('a', { class: 'chip', href: '#p-' + b.no }, 'P' + b.no))) : 'None', true),
+      kv('Buyer', who ? (k.buyer_id ? h('a', { href: '#sales-b-' + k.buyer_id }, who) : who) : 'Not entered yet'),
+      kv('Picked on', dstr(k.picked_on)),
+      kv('Payment', rc ? h('a', { href: '#rc-' + rc.ref }, `${rc.ref} · ${dstr(rc.received_on)}`) : 'Buyer owes', true),
+      k.note ? kv('Notes', k.note, true) : null));
+    if (!rc && k.buyer_id) root.append(h('a', { class: 'btn primary', href: '#sales-b-' + k.buyer_id }, `Record payment from ${who}`));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => pickForm(k) }, rc ? 'Edit notes or peringkat' : 'Edit this pick'));
+    if (rc) root.append(h('p', { class: 'muted small foot' }, 'This pick is paid, so its fruit, prices and buyer are locked. The admin partner can cancel the payment if it was a mistake.'));
+    root.append(attachBox('pick', k.id, 'Weighing slip & invoice'));
+    if (D.isAdmin && !rc) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${k.ref}?`, [{ type: 'note', label: `${fmt(pickFruit(k))} fruit picked ${dstr(k.picked_on)} will be removed with its photos. This cannot be undone.` }], async () => {
+      const paths = D.atts.filter((a) => a.entity === 'pick' && a.entity_id === k.id).map((a) => a.storage_path);
+      if (paths.length) await sb.storage.from('files').remove(paths);
+      await sb.from('attachments').delete().eq('entity', 'pick').eq('entity_id', k.id);
+      const { error } = await sb.from('harvest_picks').delete().eq('id', k.id);
+      if (error) throw error;
+      location.hash = '#sales'; await refresh('Pick deleted');
+    }, 'Delete pick', true) }, 'Delete this pick'));
+  };
+
+  // ---------- harvest pick form ----------
+  function pickForm(k, preset = {}) {
+    const isNew = !k;
+    const locked = !!(k && pickRc(k));
+    const last = sortPicks(D.picks)[0] || {};
+    const val = (f) => (k ? (Number(k[f]) || '') : '');
+    const priceVal = (f) => (k ? k[f] : last[f] ?? '');
+    const num = (x) => { const n = Number(String(x ?? '').replace(/,/g, '')); return isFinite(n) ? n : 0; };
+    const fields = [
+      { key: 'batches', label: 'Peringkat picked (tick all)', type: 'chips', required: true, value: k ? pickBatches(k).map((b) => b.id) : (preset.batches || []), options: [...D.batches].sort((x, y) => x.no - y.no).map((b) => [b.id, 'P' + b.no]) },
+      { key: 'picked_on', label: 'Date picked', type: 'date', required: true, value: k?.picked_on || today() }
+    ];
+    if (!locked) fields.push(
+      { key: 'buyer', label: 'Sold to', value: k ? pickWho(k) : preset.buyer, ph: 'e.g. wholesaler, FAMA, market stall', list: D.buyers.map((b) => b.name), note: 'A new name is added to your buyers list.' },
+      { type: 'head', label: 'Fruit by grade, and the price per fruit today' },
+      { key: 'grade_a', label: 'Grade A fruit', type: 'number', mode: 'numeric', value: val('grade_a'), ph: '0', half: true },
+      { key: 'price_a', label: 'Grade A RM each', type: 'number', mode: 'decimal', value: priceVal('price_a'), ph: '0.00', half: true },
+      { key: 'grade_b', label: 'Grade B fruit', type: 'number', mode: 'numeric', value: val('grade_b'), ph: '0', half: true },
+      { key: 'price_b', label: 'Grade B RM each', type: 'number', mode: 'decimal', value: priceVal('price_b'), ph: '0.00', half: true },
+      { key: 'grade_c', label: 'Grade C fruit', type: 'number', mode: 'numeric', value: val('grade_c'), ph: '0', half: true },
+      { key: 'price_c', label: 'Grade C RM each', type: 'number', mode: 'decimal', value: priceVal('price_c'), ph: '0.00', half: true },
+      { type: 'info', render: (r) => { const f = num(r.grade_a) + num(r.grade_b) + num(r.grade_c); const t = num(r.grade_a) * num(r.price_a) + num(r.grade_b) * num(r.price_b) + num(r.grade_c) * num(r.price_c); return h('div', { class: 'live-total' }, h('span', {}, `${fmt(f)} fruit`, h('small', {}, isNew && last.ref ? `Prices filled in from ${last.ref}; change them if today's differ.` : '')), h('span', {}, rm(t))); } });
+    fields.push({ key: 'note', label: 'Notes', type: 'textarea', value: k?.note, ph: 'e.g. weighed 1,250 kg; lorry from FAMA' });
+    openSheet(isNew ? 'Record a harvest pick' : `Edit ${k.ref}`, fields, async (v) => {
+      const row = { picked_on: v.picked_on, note: v.note };
+      if (!locked) {
+        for (const g of ['grade_a', 'grade_b', 'grade_c']) { row[g] = Math.round(v[g] || 0); if (v[g] && !Number.isInteger(v[g])) throw new Error('Fruit counts must be whole numbers.'); }
+        for (const g of ['price_a', 'price_b', 'price_c']) row[g] = v[g] || 0;
+        if (!(row.grade_a + row.grade_b + row.grade_c)) throw new Error('Enter the number of fruit for at least one grade.');
+        if (['a', 'b', 'c'].some((x) => row['grade_' + x] > 0 && !row['price_' + x])) throw new Error('Enter the price for each grade that has fruit.');
+        row.buyer_id = null; row.buyer_name = null;
+        if (v.buyer) {
+          const found = D.buyers.find((b) => b.name.trim().toLowerCase() === v.buyer.toLowerCase());
+          if (found) { row.buyer_id = found.id; row.buyer_name = found.name; }
+          else {
+            const { data, error } = await sb.from('buyers').insert({ plantation_id: D.plantation.id, name: v.buyer }).select('id, name').single();
+            if (error) throw error;
+            row.buyer_id = data.id; row.buyer_name = data.name;
+          }
+        }
+      }
+      let id = k?.id, ref = k?.ref;
+      if (isNew) {
+        let tries = 0, res;
+        do {
+          ref = nextRef('HP-', D.picks.concat(tries ? [{ ref }] : []));
+          res = await sb.from('harvest_picks').insert({ ...row, plantation_id: D.plantation.id, ref, created_by: D.me.id }).select('id').single();
+          tries++;
+        } while (res.error && /duplicate|unique/i.test(res.error.message) && tries < 4);
+        if (res.error) throw res.error;
+        id = res.data.id;
+      } else {
+        const { error } = await sb.from('harvest_picks').update(row).eq('id', id);
+        if (error) throw error;
+      }
+      const want = new Set(v.batches || []);
+      const have = new Set(D.pkb.filter((x) => x.pick_id === id).map((x) => x.batch_id));
+      const add = [...want].filter((b) => !have.has(b)).map((b) => ({ pick_id: id, batch_id: b, plantation_id: D.plantation.id }));
+      const del = [...have].filter((b) => !want.has(b));
+      if (add.length) { const { error } = await sb.from('pick_batches').insert(add); if (error) throw error; }
+      if (del.length) { const { error } = await sb.from('pick_batches').delete().eq('pick_id', id).in('batch_id', del); if (error) throw error; }
+      await refresh(isNew ? `${ref} saved` : 'Saved');
+      if (isNew) location.hash = '#pick-' + ref;
+    }, isNew ? 'Save pick' : 'Save changes');
+  }
+
+  function buyerForm(b) {
+    openSheet(`Edit ${b.name}`, [
+      { key: 'name', label: 'Name', required: true, value: b.name },
+      { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: b.phone },
+      { key: 'payment_terms', label: 'Payment terms', value: b.payment_terms, ph: 'e.g. cash on the spot, or within 7 days' },
+      { key: 'grades_bought', label: 'Grades they buy', value: b.grades_bought, ph: 'e.g. A and B only' },
+      { key: 'address', label: 'Address', type: 'textarea', value: b.address }
+    ], async (v) => {
+      const { error } = await sb.from('buyers').update(v).eq('id', b.id);
+      if (error) throw error;
+      await sb.from('harvest_picks').update({ buyer_name: v.name }).eq('buyer_id', b.id);
+      await refresh('Buyer saved');
+    });
+  }
+
+  // ---------- money received from a buyer ----------
+  function receiptForm(picks) {
+    if (!picks.length) return;
+    const who = pickWho(picks[0]);
+    const total = picks.reduce((s, k) => s + pickAmt(k), 0);
+    const items = h('div', { class: 'pay-items' }, picks.map((k) => h('div', { class: 'pi' }, h('span', {}, `${k.ref} · ${dstr(k.picked_on)} · ${fmt(pickFruit(k))} fruit`), h('b', {}, rm(pickAmt(k))))),
+      h('div', { class: 'pi total' }, h('span', {}, 'Total received'), h('b', {}, rm(total))));
+    const partners = D.members.filter((m) => m.active).map((m) => m.display_name);
+    openSheet(`Payment from ${who}`, [
+      { type: 'info', node: items },
+      { key: 'received_by', label: 'Money went to', type: 'select', value: 'Into the pool', options: [['Into the pool', 'Into the pool (plantation account)'], ...partners.map((p) => [p, p + ' (holding it for the pool)'])] },
+      { key: 'method', label: 'Method', type: 'select', value: 'Bank transfer', options: [['Bank transfer', 'Bank transfer'], ['DuitNow', 'DuitNow'], ['Cash', 'Cash'], ['Cheque', 'Cheque']] },
+      { key: 'received_on', label: 'Received on', type: 'date', value: today(), required: true },
+      { key: 'note', label: 'Note (optional)', value: '', ph: 'e.g. transfer ref 123456' },
+      { type: 'note', label: 'After saving, you can attach the bank slip or the buyer\'s payment advice on the payment page.' }
+    ], async (v) => {
+      const { data, error } = await sb.rpc('record_buyer_receipt', { p_pick_ids: picks.map((k) => k.id), p_received_by: v.received_by, p_method: v.method, p_received_on: v.received_on, p_note: v.note });
+      if (error) throw error;
+      await refresh('Payment recorded');
+      const r = D.rcs.find((x) => x.id === data);
+      if (r) location.hash = '#rc-' + r.ref;
+    }, 'Record payment');
+  }
+
+  PAGES.rc = (root, ref) => {
+    const r = D.rcs.find((x) => x.ref === ref);
+    if (!r) { location.hash = '#sales'; return; }
+    const picks = D.rp.filter((x) => x.receipt_id === r.id).map((x) => D.picks.find((k) => k.id === x.pick_id)).filter(Boolean);
+    setHead(`Payment ${r.ref}`, `${r.buyer_name || ''} · ${rm(r.amount)}`, ['Sales', r.buyer_id ? '#sales-b-' + r.buyer_id : '#sales']);
+    root.append(h('div', { class: 'card kvs' },
+      kv('From', r.buyer_id ? h('a', { href: '#sales-b-' + r.buyer_id }, r.buyer_name) : r.buyer_name),
+      kv('Amount', rm(r.amount)), kv('Received on', dstr(r.received_on)), kv('Method', r.method), kv('Money went to', r.received_by, true),
+      r.note ? kv('Note', r.note, true) : null));
+    root.append(sec('Picks in this payment'));
+    root.append(card(picks.map((k) => linkRow('#pick-' + k.ref, `${k.ref} · ${fmt(pickFruit(k))} fruit`, `${pickPlots(k)} · ${dstr(k.picked_on)}`, rm(pickAmt(k)))),
+      h('div', { class: 'trow total-row' }, h('span', { class: 'lmain' }, h('b', {}, 'Total')), h('span', { class: 'lright' }, rm(r.amount)))));
+    root.append(attachBox('receipt', r.id, 'Bank slip & payment advice'));
+    if (D.isAdmin) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Cancel ${r.ref}?`, [{ type: 'note', label: `Use this only if the payment was recorded by mistake. The ${picks.length} pick${picks.length > 1 ? 's' : ''} go back to "Buyer owes".` }], async () => {
+      const { error } = await sb.rpc('cancel_buyer_receipt', { p_receipt: r.id });
+      if (error) throw error;
+      location.hash = r.buyer_id ? '#sales-b-' + r.buyer_id : '#sales';
+      await refresh('Payment cancelled');
+    }, 'Cancel payment', true) }, 'Cancel this payment'));
+  };
+
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {
     setHead(title, 'Coming soon');
     root.append(h('div', { class: 'card soon' }, h('div', { class: 'h' }, `${title} is being built`), h('p', { class: 'muted' }, what), h('p', {}, pill(stage, 'gold'))));
   };
-  PAGES.sales = later('Sales', 'Stage 3', 'Record each harvest pick by grade and price, and the money received from buyers.');
   PAGES.exp = later('Expense', 'Stage 4', 'Partners record what they paid from their own pocket (transport, meals and other costs) and claim it back.');
   PAGES.finance = later('Finance', 'Stage 5', 'Capital pool, purchases, where the money went, and profit shares.');
   PAGES.map = later('Map', 'Later stage', 'The plantation sketch with blok, peringkat and marks for issues, fences and water.');

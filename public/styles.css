@@ -203,3 +203,17 @@ input.code{font-family:'Space Grotesk',monospace;font-size:28px;letter-spacing:6
 .btn.up{font-size:14px;min-height:46px;padding:8px;position:relative;cursor:pointer}
 .vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
 @media (max-width:380px){.jrow{grid-template-columns:40px minmax(0,1fr) 56px 80px;gap:6px}.jrow.sel{grid-template-columns:24px 36px minmax(0,1fr) 54px 78px}.srow{grid-template-columns:minmax(0,1.2fr) 36px minmax(0,1fr) minmax(0,1fr);gap:6px}}
+
+/* ---------- Stage 3: sheet in two columns where asked ---------- */
+.sheet{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-content:start;column-gap:10px;row-gap:10px}
+.sheet>*{grid-column:1 / -1}
+.sheet>.field.half{grid-column:auto}
+.live-total{background:#F6F5EF;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:10px;font-weight:700}
+.live-total small{display:block;font-weight:500;color:var(--muted)}
+.grades{display:grid;grid-template-columns:minmax(0,1fr) 70px 70px 96px;gap:6px;font-size:14px;padding:4px 0}
+.grades>*{padding:6px 0;border-bottom:1px solid var(--line2)}
+.grades .gh{font-size:12px;color:var(--muted);font-weight:600}
+.grades .r{text-align:right;font-variant-numeric:tabular-nums}
+.grades .t{font-weight:700;border-bottom:0}
+.sales-top{display:flex;flex-direction:column;gap:2px}
+.sales-top .big{font-size:24px;font-weight:600}
