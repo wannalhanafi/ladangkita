@@ -496,6 +496,7 @@
     }) : h('p', { class: 'muted' }, 'Nothing planned yet.')));
     const waitingClaims = D.claims.filter(canPayClaim);
     if (waitingClaims.length) root.append(h('a', { class: 'banner amber-b', href: '#cl-' + waitingClaims[0].ref }, h('span', {}, h('b', {}, `${waitingClaims.length} partner claim${waitingClaims.length > 1 ? 's' : ''} to pay · ${rm(waitingClaims.reduce((s, c) => s + Number(c.amount), 0))}`), h('small', {}, waitingClaims.map((c) => `${c.ref} ${memberName(c.member_id)}`).join(' · '))), h('span', { class: 'chev' }, '›')));
+    root.append(pushCard(true));
     root.append(h('div', { class: 'quick' }, h('a', { class: 'btn gold', href: '#jobs' }, 'Jobs'), h('a', { class: 'btn gold', href: '#sales' }, 'Sales'), h('a', { class: 'btn gold', href: '#exp' }, 'Expense')));
     if (toEnter) root.append(h('a', { class: 'banner amber-b', href: '#jobs-none' }, h('span', {}, h('b', {}, `${toEnter} past job${toEnter > 1 ? 's' : ''} need a contractor and price`), h('small', {}, 'From the planter\'s records. Tap to complete them.')), h('span', { class: 'chev' }, '›')));
     root.append(h('div', { class: 'card note' }, h('p', {}, h('strong', {}, 'Being built: '), 'Map, offline recording and phone notifications are coming next. Everything you see here is your real plantation data.')));
@@ -731,6 +732,8 @@
       kv('Landowner', p.landowner), kv('Rent', p.rent_amount != null ? `${rm(p.rent_amount)}${p.rent_period ? ' / ' + p.rent_period.toLowerCase() : ''}` : ''),
       kv('Lease ends', dstr(p.lease_ends_on)), kv('Phone', p.phone), kv('Email', p.email, true)));
     if (!D.isAdmin) root.append(h('p', { class: 'muted small foot' }, 'Only the admin partner can change the plantation profile.'));
+    root.append(sec('This phone'));
+    root.append(pushCard(false));
     root.append(sec('Me'));
     root.append(card(linkRow('#partner-' + D.me.id, 'My details', `${D.me.display_name} · ${D.user.email}`)));
     root.append(h('button', { class: 'btn ghost', type: 'button', onclick: signOut }, 'Sign out'));
@@ -1642,7 +1645,7 @@
   function alertForm() {
     const places = ['Whole plantation', ...D.blocks.map((b) => b.name), ...[...D.batches].sort((x, y) => x.no - y.no).map((b) => b.name), 'Fence / boundary', 'Pond (kolam)', 'Road / access'];
     openSheet('Report urgent issue', [
-      { type: 'note', label: 'Partners see it at the top of Home as soon as they open the app. (Phone notifications come in a later stage, so also tell them by WhatsApp if it can\'t wait.)' },
+      { type: 'note', label: 'Partners who turned on notifications get it on their phone straight away; everyone sees it at the top of Home. If it can\'t wait, also call them.' },
       { key: 'type', label: 'What kind of issue', type: 'select', value: AL_TYPES[0], options: AL_TYPES.map((t) => [t, t]) },
       { key: 'location', label: 'Where', type: 'select', value: 'Whole plantation', options: places.map((p) => [p, p]), half: true },
       { key: 'urgency', label: 'How urgent', type: 'select', value: 'High', options: [['High', 'High: act today'], ['Critical', 'Critical: act now']], half: true },
@@ -1895,6 +1898,61 @@
       D.reports = list;
     })();
   };
+
+  // ================= PHONE NOTIFICATIONS (Stage 7b) =================
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const b64ToBytes = (b64) => { const p = '='.repeat((4 - (b64.length % 4)) % 4); const s = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+  async function pushState() {
+    if (isIOS && !isStandalone()) return 'install';
+    if (!pushSupported()) return 'unsupported';
+    if (Notification.permission === 'denied') return 'denied';
+    try { const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && (await reg.pushManager.getSubscription()); return sub ? 'on' : 'off'; } catch (_) { return 'off'; }
+  }
+  async function enablePush() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error(perm === 'denied' ? 'Notifications are blocked for LadangKita. Allow them in the phone\'s Settings, then try again.' : 'Notifications were not allowed.');
+    const { data, error } = await sb.functions.invoke('notify-alert', { body: { action: 'key' } });
+    if (error || !data || !data.publicKey) throw new Error('Could not reach the notification service. Check your signal and try again.');
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(data.publicKey) });
+    const j = sub.toJSON();
+    const { error: e2 } = await sb.from('push_subscriptions').upsert({ plantation_id: D.plantation.id, member_id: D.me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent.slice(0, 200) }, { onConflict: 'endpoint' });
+    if (e2) throw e2;
+  }
+  async function disablePush() {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && (await reg.pushManager.getSubscription());
+    if (sub) { await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); await sub.unsubscribe(); }
+  }
+  async function testPush() {
+    const { data, error } = await sb.functions.invoke('notify-alert', { body: { action: 'test' } });
+    if (error) { let msg = 'The test could not be sent.'; try { const b = await error.context.json(); if (b.error) msg = b.error; } catch (_) {} throw new Error(msg); }
+    return data;
+  }
+  function pushCard(onHome) {
+    const box = h('div', { class: onHome ? 'card push-home' : 'card' });
+    const draw = async () => {
+      const st = await pushState();
+      if (onHome && (st === 'on' || st === 'unsupported' || (() => { try { return localStorage.getItem('lk_push_hide') === '1'; } catch (_) { return false; } })())) { box.remove(); return; }
+      const msg = h('p', { class: 'muted small', role: 'status' });
+      const btn = (label, cls, fn) => h('button', { class: 'btn ' + cls, type: 'button', onclick: async (e) => { const b = e.currentTarget; busy(b, true, 'Please wait…'); try { await fn(); } catch (ex) { msg.textContent = friendly(ex); busy(b, false, label); return; } draw(); } }, label);
+      const parts = [h('div', { class: 'h sheet-head' }, onHome ? 'Get urgent alerts on this phone' : 'Phone notifications')];
+      if (st === 'install') parts.push(h('p', { class: 'small' }, 'On iPhone, notifications only work when LadangKita is opened from its Home Screen icon. In Safari tap Share → Add to Home Screen, open LadangKita from the new icon, then come back here.'));
+      else if (st === 'unsupported') parts.push(h('p', { class: 'small muted' }, 'This browser cannot show notifications. On iPhone, use iOS 16.4 or newer with LadangKita added to the Home Screen.'));
+      else if (st === 'denied') parts.push(h('p', { class: 'small' }, 'Notifications are blocked for LadangKita on this phone. Open the phone\'s Settings → Notifications → LadangKita and allow them, then come back.'));
+      else if (st === 'off') parts.push(h('p', { class: 'small muted' }, 'When any partner reports an urgent issue, this phone gets a notification straight away, even when the app is closed.'), btn('Turn on notifications', 'primary', async () => { await enablePush(); toast('Notifications are on for this phone'); }));
+      else parts.push(h('p', { class: 'small' }, 'On for this phone. You will be told straight away when another partner reports an urgent issue.'),
+        h('div', { class: 'sheet-btns' }, btn('Send a test', 'ghost', async () => { await testPush(); toast('Test sent. It should arrive in a few seconds.'); }), btn('Turn off', 'ghost', async () => { await disablePush(); toast('Notifications are off for this phone'); })));
+      if (onHome) parts.push(h('button', { class: 'btn link', type: 'button', onclick: () => { try { localStorage.setItem('lk_push_hide', '1'); } catch (_) {} box.remove(); } }, 'Not now'));
+      parts.push(msg);
+      box.replaceChildren(...parts);
+    };
+    draw();
+    return box;
+  }
 
   // ---------- pages still to build ----------
   const later = (title, stage, what) => (root) => {

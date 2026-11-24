@@ -274,3 +274,5 @@ a.alert-item{text-decoration:none;gap:3px}
 .net.off{background:#3A403C;color:#fff;border-color:#3A403C}
 .net.bad{background:#FDECEA;color:var(--red);border-color:#F5B9A5}
 .net button{font:inherit;font-size:13px;background:#fff;color:var(--red);border:1px solid currentColor;border-radius:999px;padding:4px 10px;min-height:32px;cursor:pointer}
+.push-home{background:#EEF3EF;border-color:#CFE0D5}
+.push-home .btn.link{align-self:flex-start;padding-left:0}
