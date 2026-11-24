@@ -33,6 +33,7 @@
     e.preventDefault();
     hideErr('email-err');
     const email = $('email').value.trim().toLowerCase();
+    if (!email) { $('email').focus(); return showErr('email-err', 'The email box is empty. Tap it and type your email first.'); }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('email-err', 'Please type a full email address.');
     const btn = $('email-btn');
     busy(btn, true, 'Sending…');
