@@ -9,10 +9,15 @@
   // ---------- small helpers ----------
   const $ = (id) => document.getElementById(id);
   const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
-  const rm = (n) => 'RM ' + Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const CUR = () => (typeof D !== 'undefined' && D && D.plantation && { MYR: 'RM', SGD: 'S$', BND: 'B$', IDR: 'Rp', THB: '฿', PHP: '₱', USD: 'US$' }[D.plantation.currency]) || 'RM';
+  const cx = (txt) => String(txt).replace(/\bRM\b/g, CUR());
+  const rm = (n) => CUR() + ' ' + Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const dstr = (d) => { if (!d) return ''; const [y, m, day] = String(d).slice(0, 10).split('-').map(Number); return `${day} ${MONTHS[m - 1]} ${y}`; };
+  const p2 = (n) => String(n).padStart(2, '0');
+  const DATE_FMTS = { 'd MMM y': (d) => { const [y, m, x] = d.split('-').map(Number); return `${x} ${MONTHS[m - 1]} ${y}`; }, 'dd/mm/y': (d) => { const [y, m, x] = d.split('-'); return `${x}/${m}/${y}`; }, 'y-mm-dd': (d) => d };
+  const dateFmt = () => { try { const v = localStorage.getItem('lk_datefmt'); return DATE_FMTS[v] ? v : 'd MMM y'; } catch (_) { return 'd MMM y'; } };
+  const dstr = (d) => { if (!d) return ''; return DATE_FMTS[dateFmt()](String(d).slice(0, 10)); };
   const ageMonths = (d) => { if (!d) return null; const a = new Date(d), b = new Date(); return Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() - (b.getDate() < a.getDate() ? 1 : 0)); };
   const initials = (n) => String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const mask = (s) => { s = String(s || ''); return s.length <= 4 ? s : '•••• ' + s.slice(-4); };
@@ -403,8 +408,8 @@
     const raw = () => Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.getVal ? el.getVal() : el.value]));
     for (const fd of fields) {
       let wrap;
-      if (fd.type === 'head') wrap = h('div', { class: 'h sheet-head' }, fd.label);
-      else if (fd.type === 'note') wrap = h('div', { class: 'note-box' }, fd.label);
+      if (fd.type === 'head') wrap = h('div', { class: 'h sheet-head' }, cx(fd.label));
+      else if (fd.type === 'note') wrap = h('div', { class: 'note-box' }, typeof fd.label === 'string' ? cx(fd.label) : fd.label);
       else if (fd.type === 'info') { wrap = fd.node || h('div', {}); if (fd.render) renders.push([fd, wrap]); }
       else {
         const id = 'f_' + fd.key;
@@ -420,7 +425,7 @@
         else input = h('input', { id, type: fd.type || 'text', inputmode: fd.mode, placeholder: fd.ph || '', autocomplete: 'off', list: fd.list ? id + '_l' : null, step: fd.type === 'number' ? 'any' : null });
         if (!['select', 'chips'].includes(fd.type)) input.value = fd.value ?? '';
         inputs[fd.key] = input;
-        wrap = h(fd.type === 'chips' ? 'div' : 'label', { class: 'field' + (fd.half ? ' half' : ''), for: fd.type === 'chips' ? null : id }, h('span', {}, fd.label, fd.required ? ' *' : ''), input,
+        wrap = h(fd.type === 'chips' ? 'div' : 'label', { class: 'field' + (fd.half ? ' half' : ''), for: fd.type === 'chips' ? null : id }, h('span', {}, cx(fd.label), fd.required ? ' *' : ''), input,
           fd.list ? h('datalist', { id: id + '_l' }, fd.list.map((v) => h('option', { value: v }))) : null,
           fd.note ? h('small', {}, fd.note) : null);
       }
@@ -577,6 +582,7 @@
     }) : h('p', { class: 'muted' }, 'No work recorded yet.')));
     root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => jobForm(null, { batches: [b.id] }) }, '+ Record a job for this peringkat'));
     const picks = sortPicks(D.picks.filter((k) => D.pkb.some((x) => x.pick_id === k.id && x.batch_id === b.id)));
+    { const ct = cropTasksCard(b); if (ct) root.append(ct); }
     root.append(sec('Harvest'));
     root.append(card(picks.length ? picks.map((k) => linkRow('#pick-' + k.ref, `${k.ref} · ${fmt(pickFruit(k))} fruit`, `${dstr(k.picked_on)}${pickWho(k) ? ' · ' + pickWho(k) : ''}${pickBatches(k).length > 1 ? ' · shared with ' + pickPlots(k) : ''}`, rm(pickAmt(k))))
       : h('p', { class: 'muted' }, 'No harvest picked from this peringkat yet.')));
@@ -723,29 +729,254 @@
   };
 
   // ---------- Settings ----------
-  PAGES.settings = (root) => {
+  // ================= SETTINGS =================
+  const CURS = { MYR: ['RM', 'Malaysian ringgit'], SGD: ['S$', 'Singapore dollar'], BND: ['B$', 'Brunei dollar'], IDR: ['Rp', 'Indonesian rupiah'], THB: ['฿', 'Thai baht'], PHP: ['₱', 'Philippine peso'], USD: ['US$', 'US dollar'] };
+  const SET_PAGES = [
+    ['profile', 'Plantation profile', () => 'Name, logo, SSM number, location, land and lease'],
+    ['currency', 'Currency', () => `${CURS[D.plantation.currency]?.[1] || D.plantation.currency} (${CUR()})`],
+    ['crop', 'Crop calendar', () => `Months and tasks per variety: ${(D.templates || []).map((t) => t.variety).join(', ') || 'none yet'}`],
+    ['cats', 'Cost categories', () => `${D.cats.length} categories in Beli, Upah and Lain`],
+    ['parties', 'Contractors and buyers', () => `${D.contractors.length} contractor(s) · ${D.buyers.length} buyer(s)`],
+    ['notif', 'Notifications', () => 'Alerts, claims, jobs due, rent, buyers, weekly summary'],
+    ['storage', 'Storage and backup', () => 'Photo size, how long reports are kept, download all data'],
+    ['lang', 'Language and dates', () => `English · dates like ${dstr(today())}`]
+  ];
+  const back = ['Settings', '#settings'];
+  const adminNote = () => (D.isAdmin ? null : h('p', { class: 'muted small foot' }, 'Only the admin partner can change this.'));
+  function radioList(opts, cur, onPick, disabled) {
+    return h('div', { class: 'radio-list' }, opts.map(([v, l, s]) => h('button', { type: 'button', class: 'radio' + (String(v) === String(cur) ? ' on' : ''), disabled: !!disabled, 'aria-pressed': String(String(v) === String(cur)), onclick: () => onPick(v) },
+      h('span', { class: 'lmain' }, h('b', {}, l), s ? h('small', {}, s) : null), h('span', { class: 'tick' }, String(v) === String(cur) ? '✓' : ''))));
+  }
+  const toggle = (on, label, onChange, disabled) => h('button', { type: 'button', role: 'switch', class: 'switch' + (on ? ' on' : ''), 'aria-checked': String(!!on), 'aria-label': label, disabled: !!disabled, onclick: () => onChange(!on) }, h('span', {}));
+
+  PAGES.settings = (root, sub) => {
+    if (sub && SETTINGS[sub]) return SETTINGS[sub](root);
     setHead('Settings', D.plantation.name);
+    root.append(card(SET_PAGES.map(([k, l, s]) => linkRow('#settings-' + k, l, s())), linkRow('#reports', 'Reports', `Saved Excel and PDF files, kept ${D.settings.keep_reports_months || 12} months`)));
+    root.append(sec('Me'));
+    root.append(card(linkRow('#partner-' + D.me.id, 'My details', `${D.me.display_name} · ${D.user.email}`)));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: signOut }, 'Sign out'));
+    root.append(h('p', { class: 'muted small foot center-t' }, 'LadangKita'));
+  };
+
+  const SETTINGS = {};
+  SETTINGS.profile = (root) => {
+    setHead('Plantation profile', D.plantation.name, back);
     const p = D.plantation;
-    root.append(sec('Plantation profile', D.isAdmin ? h('button', { class: 'btn small-btn', type: 'button', onclick: editPlantation }, 'Edit') : null));
+    const logo = h('div', { class: 'logo-box' }, h('span', {}, 'Logo'));
+    if (p.logo_path) sb.storage.from('files').createSignedUrl(p.logo_path, 3600).then(({ data }) => { if (data?.signedUrl) logo.replaceChildren(h('img', { src: data.signedUrl, alt: 'Plantation logo' })); });
+    const pick = h('input', { type: 'file', accept: 'image/*', class: 'vh', onchange: async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      if (!navigator.onLine) return toast('Uploading the logo needs signal.');
+      try {
+        const blob = await shrink(f, 512);
+        const path = `${p.id}/logo/${uuid()}.jpg`;
+        const up = await sb.storage.from('files').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
+        const { error } = await sb.from('plantations').update({ logo_path: path }).eq('id', p.id); if (error) throw error;
+        if (p.logo_path) sb.storage.from('files').remove([p.logo_path]);
+        await refresh('Logo saved');
+      } catch (ex) { toast(friendly(ex)); }
+    } });
+    root.append(h('div', { class: 'card logo-row' }, logo, D.isAdmin ? h('label', { class: 'btn ghost' }, pick, p.logo_path ? 'Change logo' : 'Upload plantation logo') : h('small', { class: 'muted' }, 'Shown on reports.')));
+    root.append(sec('Details', D.isAdmin ? h('button', { class: 'btn small-btn', type: 'button', onclick: editPlantation }, 'Edit') : null));
     root.append(h('div', { class: 'card kvs' },
       kv('Name', p.name, true), kv('SSM number', p.ssm_no), kv('Business type', p.business_type), kv('Started', dstr(p.started_on)),
       kv('Area', p.area_acres ? `${Number(p.area_acres).toFixed(2)} acres${p.length_m ? ` (${fmt(p.length_m)} m × ${fmt(p.width_m)} m)` : ''}` : ''),
       kv('Address', [p.address, p.district_state].filter(Boolean).join(', '), true), kv('GPS', p.gps, true),
       kv('Landowner', p.landowner), kv('Rent', p.rent_amount != null ? `${rm(p.rent_amount)}${p.rent_period ? ' / ' + p.rent_period.toLowerCase() : ''}` : ''),
-      kv('Lease ends', dstr(p.lease_ends_on)), kv('Phone', p.phone), kv('Email', p.email, true)));
-    if (!D.isAdmin) root.append(h('p', { class: 'muted small foot' }, 'Only the admin partner can change the plantation profile.'));
-    root.append(sec('Crop calendar'));
-    root.append(card((D.templates || []).length ? [...D.templates].sort((a, b) => a.variety.localeCompare(b.variety)).map((t) => h('div', { class: 'trow' },
-      h('span', { class: 'lmain' }, h('b', {}, t.variety), h('small', {}, `Flowering (hormon) ${t.months_to_induction ?? '—'} months after planting · harvest ${t.months_induction_to_harvest ?? '—'} months after that`)),
-      h('button', { class: 'btn small-btn', type: 'button', onclick: () => cropForm(t) }, 'Edit'))) : h('p', { class: 'muted' }, 'No varieties yet.'),
-      h('button', { class: 'btn link', type: 'button', onclick: () => cropForm(null) }, '+ Add a variety')));
-    root.append(h('p', { class: 'muted small foot' }, 'Used for the harvest outlook on the Dashboard. Set the months your planter or agency advises for each variety.'));
+      kv('Next rent due', dstr(p.rent_due_on)), kv('Lease ends', dstr(p.lease_ends_on)), kv('Phone', p.phone), kv('Email', p.email, true)));
+    root.append(adminNote() || h('p', { class: 'muted small foot' }, 'The next rent date moves forward by itself after each due date (monthly or yearly rent). Partners get a reminder before it.'));
+  };
+
+  SETTINGS.currency = (root) => {
+    setHead('Currency', 'Used for every amount in the app and in reports', back);
+    root.append(radioList(Object.entries(CURS).map(([c, [sym, name]]) => [c, `${name} (${sym})`, c]), D.plantation.currency, async (c) => {
+      if (c === D.plantation.currency) return;
+      const { error } = await sb.from('plantations').update({ currency: c }).eq('id', D.plantation.id);
+      if (error) return toast(friendly(error));
+      await refresh('Currency saved');
+    }, !D.isAdmin || !navigator.onLine));
+    root.append(h('p', { class: 'muted small foot' }, 'Changing it only changes the symbol shown; amounts already entered are not converted.'));
+    root.append(adminNote() || h('span'));
+  };
+
+  let cropSel = null;
+  SETTINGS.crop = (root) => {
+    setHead('Crop calendar', 'Months and tasks for each variety', back);
+    const list = [...(D.templates || [])].sort((a, b) => a.variety.localeCompare(b.variety));
+    if (!list.find((t) => t.id === cropSel)) cropSel = list[0]?.id || null;
+    root.append(h('div', { class: 'seg' }, list.map((t) => h('button', { type: 'button', class: t.id === cropSel ? 'on' : '', onclick: () => { cropSel = t.id; route(); } }, t.variety)),
+      h('button', { type: 'button', class: 'dash', onclick: () => cropForm(null) }, '+ Variety')));
+    const t = list.find((x) => x.id === cropSel);
+    if (!t) { root.append(card(h('p', { class: 'muted' }, 'No varieties yet. Add one to start.'))); return; }
+    const used = D.batches.filter((b) => b.variety === t.variety);
+    const num = (v) => h('input', { type: 'number', inputmode: 'decimal', step: 'any', value: v ?? '' });
+    const f1 = num(t.months_to_induction), f2 = num(t.months_induction_to_harvest), f3 = num(t.fruit_per_acre);
+    root.append(h('div', { class: 'card crop-facts' },
+      h('label', {}, 'Months from planting to hormon', f1), h('label', {}, 'Months from hormon to harvest', f2), h('label', {}, 'Fruit per acre (expected)', f3)));
+    const tasks = (Array.isArray(t.tasks) ? t.tasks : []).map((x) => ({ name: x.name ?? x[0] ?? '', month: x.month ?? x[1] ?? '' }));
+    const box = h('div', { class: 'card task-edit' });
+    const draw = () => box.replaceChildren(h('div', { class: 'te-row te-head' }, h('span', {}, 'Task'), h('span', {}, 'Month'), h('span', {})),
+      ...(tasks.length ? tasks.map((x, i) => h('div', { class: 'te-row' },
+        h('input', { value: x.name, 'aria-label': 'Task name', placeholder: 'e.g. Tabur baja', oninput: (e) => { x.name = e.target.value; } }),
+        h('input', { value: x.month, type: 'number', inputmode: 'decimal', step: 'any', 'aria-label': 'Month after planting', oninput: (e) => { x.month = e.target.value; } }),
+        h('button', { type: 'button', class: 'x', 'aria-label': 'Remove task', onclick: () => { tasks.splice(i, 1); draw(); } }, '×'))) : [h('p', { class: 'muted small' }, 'No tasks yet.')]),
+      h('button', { type: 'button', class: 'btn link', onclick: () => { tasks.push({ name: '', month: '' }); draw(); box.querySelector('.te-row:last-of-type input')?.focus(); } }, '+ Add task'));
+    draw();
+    root.append(sec('Tasks, counted from the planting date'));
+    root.append(box);
+    root.append(h('p', { class: 'muted small foot' }, 'These months are a starting guide; set them from your own experience or the agency\'s advice. Each peringkat with this variety shows these tasks with their dates. The harvest outlook on the Dashboard uses the first two numbers.'));
+    const n = (el) => (el.value === '' ? null : Number(el.value));
+    root.append(h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+      if (!navigator.onLine) return toast('Saving the calendar needs signal.');
+      const clean = tasks.filter((x) => x.name.trim()).map((x) => ({ name: x.name.trim(), month: x.month === '' ? null : Number(x.month) })).sort((a, b) => (a.month ?? 999) - (b.month ?? 999));
+      const { error } = await sb.from('crop_templates').update({ months_to_induction: n(f1), months_induction_to_harvest: n(f2), fruit_per_acre: n(f3) == null ? null : Math.round(n(f3)), tasks: clean }).eq('id', t.id);
+      if (error) return toast(friendly(error));
+      await refresh('Crop calendar saved');
+    } }, 'Save calendar'));
+    root.append(h('div', { class: 'row-btns' }, h('button', { class: 'btn link', type: 'button', onclick: () => cropForm(t) }, 'Rename'),
+      D.isAdmin ? h('button', { class: 'btn link danger-t', type: 'button', onclick: () => {
+        if (used.length) return toast(`${t.variety} is set on ${used.map((b) => 'P' + b.no).join(', ')}. Change those first.`);
+        openSheet(`Delete ${t.variety}?`, [{ type: 'note', label: 'The months and tasks for this variety are removed.' }], async () => { const { error } = await sb.from('crop_templates').delete().eq('id', t.id); if (error) throw error; cropSel = null; await refresh('Variety deleted'); }, 'Delete', true);
+      } }, 'Delete variety') : null));
+    root.append(h('p', { class: 'muted small' }, used.length ? `Set on: ${used.map((b) => b.name).join(', ')}` : 'Not set on any peringkat yet (Status → peringkat → Edit).'));
+  };
+
+  SETTINGS.cats = (root) => {
+    setHead('Cost categories', 'Every cost is filed under one category', back);
+    root.append(h('p', { class: 'muted small' }, h('b', {}, 'Beli'), ' = things bought, ', h('b', {}, 'Upah'), ' = paid work (used for Jobs), ', h('b', {}, 'Lain'), ' = everything else. Finance shows the money by these categories.'));
+    const usedBy = (name) => D.jobs.filter((j) => j.category === name).length + D.purchases.filter((p) => p.category === name).length;
+    for (const [g, title] of [['Beli', 'Beli (bought)'], ['Upah', 'Upah (paid work)'], ['Lain', 'Lain (other)']]) {
+      const items = D.cats.filter((c) => c.grp === g).sort((a, b) => (a.sort || 0) - (b.sort || 0) || a.name.localeCompare(b.name));
+      root.append(sec(title));
+      root.append(card(items.length ? items.map((c) => { const n = usedBy(c.name); return h('div', { class: 'trow' }, h('span', { class: 'lmain' }, h('b', {}, c.name), n ? h('small', {}, `used ${n} time(s)`) : null),
+        D.isAdmin ? h('button', { type: 'button', class: 'x', 'aria-label': `Remove ${c.name}`, onclick: () => {
+          if (n) return toast(`${c.name} is used ${n} time(s), so it can't be removed.`);
+          openSheet(`Remove ${c.name}?`, [{ type: 'note', label: 'It will no longer be offered when recording costs.' }], async () => { const { error } = await sb.from('cost_categories').delete().eq('id', c.id); if (error) throw error; await refresh('Category removed'); }, 'Remove', true);
+        } }, '×') : null); }) : h('p', { class: 'muted' }, 'None.')));
+    }
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => openSheet('Add a category', [
+      { key: 'grp', label: 'Group', type: 'select', value: 'Beli', options: [['Beli', 'Beli (bought)'], ['Upah', 'Upah (paid work)'], ['Lain', 'Lain (other)']] },
+      { key: 'name', label: 'Name', required: true, ph: 'e.g. Beli Racun Rumput' }
+    ], async (v) => {
+      if (D.cats.some((c) => c.name.toLowerCase() === v.name.trim().toLowerCase())) throw new Error('That category already exists.');
+      const sort = Math.max(0, ...D.cats.filter((c) => c.grp === v.grp).map((c) => c.sort || 0)) + 1;
+      const { error } = await sb.from('cost_categories').insert({ plantation_id: D.plantation.id, grp: v.grp, name: v.name.trim(), sort });
+      if (error) throw error;
+      await refresh('Category added');
+    }, 'Add') }, '+ Add a category'));
+  };
+
+  let partyTab = 'c';
+  const BUYER_TYPES = ['Wholesaler', 'Retailer', 'Factory', 'Exporter', 'Market stall', 'Individual'];
+  SETTINGS.parties = (root) => {
+    setHead('Contractors and buyers', 'Fills the choices in Jobs and Sales', back);
+    root.append(h('div', { class: 'seg' }, [['c', `Contractors (${D.contractors.length})`], ['b', `Buyers (${D.buyers.length})`]].map(([k, l]) => h('button', { type: 'button', class: partyTab === k ? 'on' : '', onclick: () => { partyTab = k; route(); } }, l))));
+    const isC = partyTab === 'c';
+    root.append(h('button', { class: 'btn gold', type: 'button', onclick: () => partyForm(isC, null) }, isC ? '+ Add a contractor' : '+ Add a buyer'));
+    const list = isC ? D.contractors : D.buyers;
+    root.append(card(list.length ? list.map((x) => {
+      const n = isC ? D.jobs.filter((j) => j.contractor_id === x.id).length : D.picks.filter((k) => k.buyer_id === x.id).length;
+      const tags = (isC ? x.work_types : x.buyer_types) || [];
+      return h('div', { class: 'trow' }, h('a', { class: 'lmain', href: isC ? '#jobs-c-' + x.id : '#sales-b-' + x.id }, h('b', {}, x.name),
+        h('small', {}, [x.phone, tags.join(', ')].filter(Boolean).join(' · ') || (isC ? 'No work types set' : 'No buyer type set')),
+        h('small', {}, isC ? `${n} job(s)${x.bank_name ? ' · ' + x.bank_name : ''}` : `${n} pick(s)${x.payment_terms ? ' · ' + x.payment_terms : ''}`)),
+        h('button', { class: 'btn small-btn', type: 'button', onclick: () => partyForm(isC, x) }, 'Edit'));
+    }) : h('p', { class: 'muted' }, 'None added yet. They are also added when you type a new name in a job or harvest pick.')));
+  };
+  function partyForm(isC, x) {
+    const upah = D.cats.filter((c) => c.grp === 'Upah').map((c) => [c.name, c.name.replace(/^Upah /, '')]);
+    const fields = isC ? [
+      { key: 'name', label: 'Name', required: true, value: x?.name },
+      { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: x?.phone, half: true },
+      { key: 'ssm_or_ic', label: 'SSM or IC number', value: x?.ssm_or_ic, half: true },
+      { key: 'work_types', label: 'Work they do', type: 'chips', value: x?.work_types || [], options: upah },
+      { key: 'bank_name', label: 'Bank', value: x?.bank_name, ph: 'e.g. Maybank', half: true },
+      { key: 'account_no', label: 'Account number', value: x?.account_no, mode: 'numeric', half: true },
+      { key: 'usual_rates', label: 'Usual rates', value: x?.usual_rates, ph: `e.g. Sembur ${CUR()} 250 per acre` },
+      { key: 'address', label: 'Address', type: 'textarea', value: x?.address }
+    ] : [
+      { key: 'name', label: 'Name', required: true, value: x?.name },
+      { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: x?.phone },
+      { key: 'buyer_types', label: 'Type of buyer', type: 'chips', value: x?.buyer_types || [], options: BUYER_TYPES.map((t) => [t, t]) },
+      { key: 'payment_terms', label: 'Payment terms', value: x?.payment_terms, ph: 'e.g. Cash on pick-up / 14 days', half: true },
+      { key: 'grades_bought', label: 'Grades bought', value: x?.grades_bought, ph: 'e.g. A and B', half: true },
+      { key: 'address', label: 'Address', type: 'textarea', value: x?.address }
+    ];
+    openSheet(x ? `Edit ${x.name}` : isC ? 'New contractor' : 'New buyer', fields, async (v) => {
+      const table = isC ? 'contractors' : 'buyers';
+      if (!x && (isC ? D.contractors : D.buyers).some((y) => y.name.toLowerCase() === v.name.trim().toLowerCase())) throw new Error(`${v.name} is already in the list.`);
+      const { error } = x ? await sb.from(table).update(v).eq('id', x.id) : await sb.from(table).insert({ ...v, plantation_id: D.plantation.id });
+      if (error) throw error;
+      if (x && isC) await sb.from('jobs').update({ contractor_name: v.name }).eq('contractor_id', x.id).neq('status', 'Paid');
+      await refresh(isC ? 'Contractor saved' : 'Buyer saved');
+    });
+  }
+
+  const NOTIFS = [
+    ['alert', 'Urgent alerts', 'Straight away, when a partner reports one'],
+    ['claim', 'Expense claims', 'When a partner claims, then weekly while unpaid'],
+    ['job', 'Jobs due or late', 'Before a planned job; the day after it is late, then weekly', [[1, '1 day before'], [3, '3 days before'], [7, '7 days before']]],
+    ['buyer', 'Buyer payment overdue', 'When a harvest pick stays unpaid, then weekly', [[7, 'After 7 days'], [14, 'After 14 days'], [30, 'After 30 days']]],
+    ['rent', 'Land rent due', 'Before the next rent date (set in the plantation profile)', [[7, '7 days before'], [14, '14 days before'], [30, '30 days before']]],
+    ['lease', 'Lease ending', 'Before the lease end date', [[90, '3 months before'], [180, '6 months before']]],
+    ['weekly', 'Weekly summary', 'Monday morning: last week in numbers']
+  ];
+  const NDEF = { job: 3, buyer: 7, rent: 7, lease: 90 };
+  SETTINGS.notif = (root) => {
+    setHead('Notifications', 'Your own choices; other partners choose theirs', back);
     root.append(sec('This phone'));
     root.append(pushCard(false));
-    root.append(sec('Me'));
-    root.append(card(linkRow('#partner-' + D.me.id, 'My details', `${D.me.display_name} · ${D.user.email}`)));
-    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: signOut }, 'Sign out'));
-    root.append(h('p', { class: 'muted small foot center-t' }, 'LadangKita · Stage 1'));
+    const pref = { ...(D.me.notify || {}) };
+    const save = async () => {
+      const { error } = await sb.from('members').update({ notify: pref }).eq('id', D.me.id);
+      if (error) return toast(friendly(error));
+      D.me.notify = pref; const m = D.members.find((x) => x.id === D.me.id); if (m) m.notify = pref; saveSnap(); route(); toast('Saved');
+    };
+    root.append(sec('What you get'));
+    root.append(card(NOTIFS.map(([k, l, s, days]) => {
+      const on = pref[k] !== false;
+      return h('div', { class: 'trow notif' }, h('span', { class: 'lmain' }, h('b', {}, l), h('small', {}, s)),
+        days ? h('select', { 'aria-label': `${l}: when`, disabled: !on || !navigator.onLine, onchange: (e) => { pref[k + '_days'] = Number(e.target.value); save(); } }, days.map(([v, t]) => h('option', { value: v, selected: Number(pref[k + '_days'] || NDEF[k]) === v }, t))) : null,
+        toggle(on, l, (v) => { if (!navigator.onLine) return toast('Changing this needs signal.'); pref[k] = v; save(); }));
+    })));
+    root.append(h('p', { class: 'muted small foot' }, 'Reminders are checked every morning at about 8 am. They only reach phones where notifications are turned on (above).'));
+    root.append(sec('Weekly backup by email'));
+    root.append(card(h('p', { class: 'muted' }, 'Sending the full report by email needs the plantation\'s own email sender, which is set up before the other partners join. Until then, use Storage and backup → Download all data now.')));
+  };
+
+  SETTINGS.storage = (root) => {
+    setHead('Storage and backup', D.plantation.name, back);
+    const mb = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + ' MB';
+    const photos = D.atts.reduce((s, a) => s + (a.bytes || 0), 0), reps = D.reports.reduce((s, r) => s + (r.bytes || 0), 0);
+    root.append(h('div', { class: 'card' }, h('div', { class: 'st-row' }, h('span', {}, 'Storage used'), h('b', {}, mb(photos + reps))),
+      h('p', { class: 'muted small' }, `Photos and receipts ${mb(photos)} (${D.atts.length} files) · reports ${mb(reps)} (${D.reports.length} files) · records are tiny.`)));
+    root.append(sec('Photo size when uploading'));
+    const setS = async (vals, msg) => {
+      if (!navigator.onLine) return toast('Changing this needs signal.');
+      const { error } = await sb.from('settings').upsert({ plantation_id: D.plantation.id, ...vals }, { onConflict: 'plantation_id' });
+      if (error) return toast(friendly(error));
+      await refresh(msg);
+    };
+    root.append(radioList([['Small', 'Small (about 200 KB)', 'Recommended: clear enough for receipts, saves space and data'], ['Medium', 'Medium (about 500 KB)', 'Sharper photos of crops and damage'], ['Original', 'Original', 'As taken by the camera (can be several MB)']],
+      D.settings.photo_size || 'Small', (v) => setS({ photo_size: v }, 'Photo size saved'), !D.isAdmin));
+    root.append(sec('Keep saved reports for'));
+    root.append(radioList([[6, '6 months', ''], [12, '12 months', 'Recommended'], [24, '24 months', '']], D.settings.keep_reports_months || 12, (v) => setS({ keep_reports_months: Number(v) }, 'Saved'), !D.isAdmin));
+    root.append(h('p', { class: 'muted small foot' }, 'Older saved reports are removed when the admin opens Reports. Photos and records are never removed automatically.'));
+    root.append(adminNote() || h('span'));
+    root.append(sec('Backup'));
+    root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => exportSheet(fullReport, 'All data') }, 'Download all data now (Excel / PDF)'));
+    root.append(h('p', { class: 'muted small foot' }, 'Every table in one file. The data is also kept safe on the server with daily backups.'));
+  };
+
+  SETTINGS.lang = (root) => {
+    setHead('Language and dates', 'For this phone', back);
+    root.append(sec('Language'));
+    root.append(radioList([['en', 'English', 'Field words stay in Malay: blok, peringkat, upah, beli…']], 'en', () => {}));
+    root.append(h('p', { class: 'muted small foot' }, 'A Bahasa Melayu version is not built yet.'));
+    root.append(sec('Date format'));
+    const ex = '2026-11-25';
+    root.append(radioList(Object.entries(DATE_FMTS).map(([k, f]) => [k, f(ex), k === 'd MMM y' ? 'Default' : '']), dateFmt(), (v) => { try { localStorage.setItem('lk_datefmt', v); } catch (_) { /* ignore */ } route(); toast('Date format saved on this phone'); }));
   };
 
   function editPlantation() {
@@ -764,6 +995,7 @@
       { key: 'landowner', label: 'Landowner', value: p.landowner },
       { key: 'rent_amount', label: 'Rent (RM)', type: 'number', mode: 'decimal', value: p.rent_amount },
       { key: 'rent_period', label: 'Rent per', type: 'select', value: p.rent_period || '', options: [['', '—'], ['Month', 'Month'], ['Year', 'Year'], ['Season', 'Season']] },
+      { key: 'rent_due_on', label: 'Next rent due on', type: 'date', value: p.rent_due_on },
       { key: 'lease_ends_on', label: 'Lease ends on', type: 'date', value: p.lease_ends_on },
       { type: 'head', label: 'Contact' },
       { key: 'phone', label: 'Phone', type: 'tel', mode: 'tel', value: p.phone },
@@ -841,7 +1073,7 @@
     const drawPay = () => { const t = list.filter((j) => sel.has(j.id)).reduce((s, j) => s + Number(j.price || 0), 0); payBtn.disabled = !sel.size; payBtn.textContent = sel.size ? `Pay ${contractor.name} · ${sel.size} job${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick jobs to pay'; };
     root.append(sec(cid || none ? 'Jobs' : 'All jobs', xpBtn(() => SPEC.jobs(list, contractor ? `Jobs · ${contractor.name}` : none ? 'Jobs without a contractor' : 'All jobs'), contractor ? `Jobs ${contractor.name}` : 'Jobs')));
     root.append(h('div', { class: 'card table' },
-      h('div', { class: 'jrow ghead' + (contractor ? ' sel' : '') }, contractor ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Job'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      h('div', { class: 'jrow ghead' + (contractor ? ' sel' : '') }, contractor ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Job'), h('span', { class: 'num' }, CUR()), h('span', {}, 'Status')),
       list.length ? list.map((j) => {
         const pv = jobPay(j);
         const box = payable(j) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + j.ref, onchange: (e) => { if (e.target.checked) sel.add(j.id); else sel.delete(j.id); drawPay(); } }) : null;
@@ -1137,7 +1369,7 @@
     const drawRecv = () => { const t = list.filter((k) => sel.has(k.id)).reduce((s, k) => s + pickAmt(k), 0); recvBtn.disabled = !sel.size; recvBtn.textContent = sel.size ? `Record payment from ${buyer.name} · ${rm(t)}` : 'Tick picks paid'; };
     root.append(sec('Harvest picks', xpBtn(() => SPEC.picks(list, buyer ? `Harvest picks · ${buyer.name}` : undefined), 'Harvest picks')));
     root.append(h('div', { class: 'card table' },
-      h('div', { class: 'jrow ghead' + (buyer ? ' sel' : '') }, buyer ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Pick'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      h('div', { class: 'jrow ghead' + (buyer ? ' sel' : '') }, buyer ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Pick'), h('span', { class: 'num' }, CUR()), h('span', {}, 'Status')),
       list.length ? list.map((k) => {
         const rc = pickRc(k);
         const box = payable(k) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + k.ref, onchange: (e) => { if (e.target.checked) sel.add(k.id); else sel.delete(k.id); drawRecv(); } }) : null;
@@ -1163,7 +1395,7 @@
     setHead(`${k.ref} · ${fmt(pickFruit(k))} fruit`, `${dstr(k.picked_on)} · ${rc ? 'Received' : 'Buyer owes'}`, ['Sales', '#sales']);
     const g = (name, n, pr) => (n ? [h('span', {}, name), h('span', { class: 'r' }, fmt(n)), h('span', { class: 'r' }, money2(pr)), h('span', { class: 'r' }, money2(n * pr))] : []);
     root.append(h('div', { class: 'card' }, h('div', { class: 'grades' },
-      h('span', { class: 'gh' }, 'Grade'), h('span', { class: 'gh r' }, 'Fruit'), h('span', { class: 'gh r' }, 'RM each'), h('span', { class: 'gh r' }, 'RM'),
+      h('span', { class: 'gh' }, 'Grade'), h('span', { class: 'gh r' }, 'Fruit'), h('span', { class: 'gh r' }, CUR() + ' each'), h('span', { class: 'gh r' }, CUR()),
       g('Grade A', Number(k.grade_a), Number(k.price_a)), g('Grade B', Number(k.grade_b), Number(k.price_b)), g('Grade C', Number(k.grade_c), Number(k.price_c)),
       h('span', { class: 't' }, 'Total'), h('span', { class: 't r' }, fmt(pickFruit(k))), h('span', { class: 't' }), h('span', { class: 't r' }, rm(pickAmt(k))))));
     root.append(h('div', { class: 'card kvs' },
@@ -1349,7 +1581,7 @@
     const drawClaim = () => { const t = list.filter((e) => sel.has(e.id)).reduce((s, e) => s + Number(e.amount), 0); claimBtn.disabled = !sel.size; claimBtn.textContent = sel.size ? `Claim ${sel.size} expense${sel.size > 1 ? 's' : ''} · ${rm(t)}` : 'Tick expenses to claim'; };
     root.append(sec('Expenses', xpBtn(() => SPEC.expenses(list, member ? `Expenses · ${member.display_name}` : pool ? 'Expenses paid from the pool' : undefined), 'Expenses')));
     root.append(h('div', { class: 'card table' },
-      h('div', { class: 'jrow ghead' + (canClaim ? ' sel' : '') }, canClaim ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Expense'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'Status')),
+      h('div', { class: 'jrow ghead' + (canClaim ? ' sel' : '') }, canClaim ? h('span', {}, '') : null, h('span', {}, 'Date'), h('span', {}, 'Expense'), h('span', { class: 'num' }, CUR()), h('span', {}, 'Status')),
       list.length ? list.map((e) => {
         const c = exClaim(e), st = exStatus(e);
         const box = claimable(e) ? h('input', { type: 'checkbox', 'aria-label': 'Select ' + e.ref, onchange: (ev) => { if (ev.target.checked) sel.add(e.id); else sel.delete(e.id); drawClaim(); } }) : null;
@@ -1404,7 +1636,7 @@
       { key: 'spent_on', label: 'Date', type: 'date', required: true, value: e?.spent_on || today() },
       { type: 'note', label: isNew ? 'After saving, add a photo of the receipt on the next page.' : 'Keep the receipt photo on this expense; it goes with the claim.' }
     ], async (v) => {
-      if (!(v.amount > 0)) throw new Error('Amount must be more than RM 0.');
+      if (!(v.amount > 0)) throw new Error('Amount must be more than ' + rm(0) + '.');
       const row = { type: v.type, what: v.what, amount: Math.round(v.amount * 100) / 100, spent_on: v.spent_on, paid_from_pool: v.who === 'pool', member_id: v.who === 'pool' ? null : v.who };
       let ref = e?.ref; const id = e?.id || uuid();
       const op = isNew ? { op: 'insert', table: 'expenses', rows: [{ ...row, id, plantation_id: D.plantation.id, ref: (ref = nextRef('EX-', D.expenses)) }], refPrefix: 'EX-' } : { op: 'update', table: 'expenses', values: row, eq: { id } };
@@ -1518,7 +1750,7 @@
         h('span', { class: 'g-track' }, neg ? h('span', { class: 'g-zero', style: `left:${zero}%` }) : null, h('span', { class: 'g-bar', style: `left:${left}%;width:${Math.max(v ? 1.5 : 0, w)}%;background:${r[2]}` })));
       bars.append(b);
     });
-    box.append(bars, h('div', { class: 'g-scale' }, h('span', {}, neg ? '← loss' : ''), h('span', {}, neg ? 'line = RM 0' : ''), h('span', {}, `RM ${fmt(Math.round(max))} →`)), note);
+    box.append(bars, h('div', { class: 'g-scale' }, h('span', {}, neg ? '← loss' : ''), h('span', {}, neg ? 'line = ' + CUR() + ' 0' : ''), h('span', {}, `${CUR()} ${fmt(Math.round(max))} →`)), note);
     return box;
   }
 
@@ -1547,7 +1779,7 @@
     root.append(sec('Purchases', xpBtn(SPEC.purchases, 'Purchases')));
     const list = [...D.purchases].sort((a, b) => String(b.purchased_on || '').localeCompare(String(a.purchased_on || '')) || b.ref.localeCompare(a.ref));
     root.append(h('div', { class: 'card table' },
-      h('div', { class: 'mrow p ghead' }, h('span', {}, 'Category · item · from'), h('span', { class: 'num' }, 'RM'), h('span', {}, 'For')),
+      h('div', { class: 'mrow p ghead' }, h('span', {}, 'Category · item · from'), h('span', { class: 'num' }, CUR()), h('span', {}, 'For')),
       list.length ? list.map((p) => h('div', { class: 'mrow p' },
         h('span', {}, h('a', { href: '#buy-' + p.ref }, `${p.category}${p.item ? ' · ' + p.item : ''}`), h('small', {}, `${p.ref} · ${p.supplier || '—'} · ${p.purchased_on ? dstr(p.purchased_on) : p.date_note || 'date to set'}`)),
         h('span', { class: 'num' }, p.amount != null ? money2(p.amount) : h('a', { class: 'pill amber', href: '#buy-' + p.ref }, 'Enter price')),
@@ -1678,7 +1910,7 @@
     const a = D.alerts.find((x) => x.ref === ref);
     if (!a) { location.hash = '#alerts'; return; }
     const closed = a.status === 'Closed';
-    setHead(`${a.ref} · ${a.type}`, `${a.status} · ${a.urgency}`, ['All alerts', '#alerts']);
+    setHead(`${a.ref} · ${a.type}`, `${a.status} · ${a.urgency}`, ['Home', '#']);
     root.append(h('div', { class: 'card kvs' },
       kv('Where', a.location || 'Whole plantation'), kv('How urgent', a.urgency === 'Critical' ? 'Critical: act now' : 'High: act today'),
       kv('Reported by', `${memberName(a.reported_by)}, ${ago(a.reported_at)}`, true),
@@ -1700,6 +1932,7 @@
       root.append(h('button', { class: 'btn link', type: 'button', onclick: async () => { const { error } = await sb.from('alerts').update({ status: 'Action taken', closed_at: null, closed_by: null }).eq('id', a.id); if (error) return toast(friendly(error)); await refresh('Alert reopened'); } }, 'Reopen this alert'));
     }
     root.append(attachBox('alert', a.id, 'Photos'));
+    root.append(h('div', { class: 'alert-btns' }, h('a', { class: 'btn primary', href: '#' }, 'Done · back to Home'), h('a', { class: 'btn ghost', href: '#alerts' }, 'All alerts')));
   };
 
   // ================= REPORTS: EXCEL AND PDF (Stage 6) =================
@@ -1723,7 +1956,7 @@
         if ((c.t === 'money' || c.t === 'int') && typeof v === 'number' && isFinite(v)) return { value: c.t === 'money' ? Math.round(v * 100) / 100 : v, type: Number, format: c.t === 'money' ? '#,##0.00' : '#,##0' };
         return { value: safe(v), type: String };
       };
-      const data = [...head, sp.cols.map((c) => ({ value: c.h, ...bold, backgroundColor: '#E8EFE9', align: c.t === 'text' ? 'left' : 'right' })),
+      const data = [...head, sp.cols.map((c) => ({ value: cx(c.h), ...bold, backgroundColor: '#E8EFE9', align: c.t === 'text' ? 'left' : 'right' })),
         ...sp.rows.map((r) => r.map((v, j) => cell(v, sp.cols[j]))),
         ...(sp.foot ? [sp.foot.map((v, j) => { const c = cell(v, sp.cols[j]); return c ? { ...c, ...bold } : null; })] : [])];
       const name = (sp.sheet || sp.title).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet' + (i + 1);
@@ -1750,7 +1983,7 @@
       const align = (c) => (c.t === 'text' ? 'left' : 'right');
       doc.autoTable({
         startY: y + 3, margin: { left: 12, right: 12, bottom: 16 },
-        head: [sp.cols.map((c) => ({ content: c.h, styles: { halign: align(c) } }))],
+        head: [sp.cols.map((c) => ({ content: cx(c.h), styles: { halign: align(c) } }))],
         body: sp.rows.map((r) => r.map((v, j) => fmtCell(v, sp.cols[j]))),
         foot: sp.foot ? [sp.foot.map((v, j) => ({ content: fmtCell(v, sp.cols[j]), styles: { halign: align(sp.cols[j]) } }))] : undefined,
         showFoot: 'lastPage',
@@ -2032,7 +2265,7 @@
       foot: ['Total', '', '', D.batches.reduce((s, b) => s + b.plants, 0), rows.reduce((s, r) => s + Number(r.area || 0), 0), totSpent, totSales, totSales - totSpent, null] });
     col1.append(sec('Peringkat: cost, sales and profit', xpBtn(pSpec, 'Peringkat money')));
     col1.append(h('div', { class: 'card table scroll' }, h('table', { class: 'dtable' },
-      h('thead', {}, h('tr', {}, ['Peringkat', 'Variety', 'Plants', 'Acres', 'Spent', 'Sales', 'Profit', 'RM / plant'].map((x, i) => h('th', { class: i > 1 ? 'num' : '' }, x)))),
+      h('thead', {}, h('tr', {}, ['Peringkat', 'Variety', 'Plants', 'Acres', 'Spent', 'Sales', 'Profit', CUR() + ' / plant'].map((x, i) => h('th', { class: i > 1 ? 'num' : '' }, x)))),
       h('tbody', {}, rows.map((r) => h('tr', {}, h('td', {}, h('a', { href: '#p-' + r.b.no }, h('span', { class: 'long' }, r.b.name), h('span', { class: 'short' }, 'P' + r.b.no)), h('small', {}, batchInfo(r.b).blockNames.join(' + '))), h('td', {}, r.b.variety || '—'),
         h('td', { class: 'num' }, fmt(r.b.plants)), h('td', { class: 'num' }, r.area != null ? Number(r.area).toFixed(2) : '—'), h('td', { class: 'num' }, money2(r.a.spent)), h('td', { class: 'num' }, money2(r.a.sales)),
         h('td', { class: 'num ' + (r.profit < 0 ? 'red-t' : 'green-t') }, (r.profit < 0 ? '−' : '') + money2(Math.abs(r.profit))), h('td', { class: 'num' }, r.b.plants ? (r.a.spent / r.b.plants).toFixed(3) : '—'))),
@@ -2093,7 +2326,7 @@
     const stSpec = () => { const m = D.members.find((x) => x.id === stBox.dataset.member) || D.me; const share = M.pool ? Number(m.capital || 0) / M.pool : 0; const es = D.expenses.filter((e) => e.member_id === m.id && !e.paid_from_pool);
       const sum = (f) => es.filter(f).reduce((s, e) => s + Number(e.amount), 0);
       return { title: `Partner statement · ${m.display_name}`, sheet: 'Partner statement', sub: `Plantation capital ${rm(M.pool)} · costs ${rm(M.spent)} · sales ${rm(M.sales)} · ${M.profit < 0 ? 'loss' : 'profit'} ${rm(Math.abs(M.profit))}`,
-        cols: [{ h: 'Item', t: 'text', w: 34 }, { h: 'RM / %', t: 'money', w: 16 }],
+        cols: [{ h: 'Item', t: 'text', w: 34 }, { h: 'Amount / %', t: 'money', w: 16 }],
         rows: [['Capital paid in (RM)', Number(m.capital || 0)], ['Share of the plantation (%)', share * 100], [M.profit < 0 ? 'Share of loss so far (RM)' : 'Share of profit so far (RM)', Math.abs(M.profit) * share], ['Own-pocket spending not claimed (RM)', sum((e) => !exClaim(e))], ['Claimed, waiting to be paid (RM)', sum((e) => exClaim(e)?.status === 'Claimed')], ['Claims paid back (RM)', sum((e) => exClaim(e)?.status === 'Paid')]] }; };
     col2.append(sec('Partner statement', xpBtn(stSpec, 'Partner statement')));
     drawSt(act.find((x) => x.id === D.me.id) || act[0] || D.me);
@@ -2123,7 +2356,7 @@
       { key: 'amount', label: 'Top-up amount (RM)', type: 'number', mode: 'decimal', required: true, ph: '0.00' },
       { type: 'note', label: 'This adds to the partner\'s capital paid in, so everyone\'s share is recalculated. Keep the bank slip as a receipt.' }
     ], async (v) => {
-      if (!(v.amount > 0)) throw new Error('The amount must be more than RM 0.');
+      if (!(v.amount > 0)) throw new Error('The amount must be more than ' + rm(0) + '.');
       const m = act.find((x) => x.id === v.member);
       const { error } = await sb.from('members').update({ capital: Math.round((Number(m.capital || 0) + v.amount) * 100) / 100 }).eq('id', m.id);
       if (error) throw error;
@@ -2132,16 +2365,42 @@
   }
 
   function cropForm(t) {
-    openSheet(t ? `Crop calendar · ${t.variety}` : 'Add a variety', [
-      { key: 'variety', label: 'Variety', required: true, value: t?.variety, ph: 'e.g. MD2' },
-      { key: 'months_to_induction', label: 'Months from planting to flowering (hormon)', type: 'number', mode: 'decimal', value: t?.months_to_induction, half: true },
-      { key: 'months_induction_to_harvest', label: 'Months from hormon to harvest', type: 'number', mode: 'decimal', value: t?.months_induction_to_harvest, half: true }
+    openSheet(t ? `Rename ${t.variety}` : 'Add a variety', [
+      { key: 'variety', label: 'Variety name', required: true, value: t?.variety, ph: 'e.g. MD2' },
+      t ? { type: 'note', label: 'Peringkat set to this variety are renamed with it.' } : { type: 'note', label: 'Then set its months and tasks on the next screen.' }
     ], async (v) => {
-      const row = { variety: v.variety, months_to_induction: v.months_to_induction, months_induction_to_harvest: v.months_induction_to_harvest };
-      const { error } = t ? await sb.from('crop_templates').update(row).eq('id', t.id) : await sb.from('crop_templates').insert({ ...row, plantation_id: D.plantation.id });
-      if (error) throw error;
-      await refresh('Crop calendar saved');
+      const name = v.variety.trim();
+      if ((D.templates || []).some((x) => x.id !== t?.id && x.variety.toLowerCase() === name.toLowerCase())) throw new Error(`${name} is already in the list.`);
+      if (t) {
+        const { error } = await sb.from('crop_templates').update({ variety: name }).eq('id', t.id); if (error) throw error;
+        if (name !== t.variety) { const r = await sb.from('batches').update({ variety: name }).eq('plantation_id', D.plantation.id).eq('variety', t.variety); if (r.error) throw r.error; }
+      } else {
+        const id = uuid();
+        const { error } = await sb.from('crop_templates').insert({ id, plantation_id: D.plantation.id, variety: name, tasks: [] }); if (error) throw error;
+        cropSel = id;
+      }
+      await refresh('Variety saved');
+      location.hash = '#settings-crop';
     });
+  }
+
+  // crop calendar tasks for one peringkat, dated from its planting date
+  function cropTasksCard(b) {
+    const t = (D.templates || []).find((x) => x.variety === b.variety);
+    if (!b.variety || !t || !b.planted_on) return null;
+    const tasks = (Array.isArray(t.tasks) ? t.tasks : []).filter((x) => x && x.name && x.month != null);
+    const rows = [...tasks.map((x) => ({ name: x.name, month: Number(x.month) })),
+      ...(t.months_to_induction != null ? [{ name: 'Hormon (flower induction)', month: Number(t.months_to_induction), key: true }] : []),
+      ...(t.months_to_induction != null && t.months_induction_to_harvest != null ? [{ name: 'Harvest starts', month: Number(t.months_to_induction) + Number(t.months_induction_to_harvest), key: true }] : [])]
+      .sort((a, b2) => a.month - b2.month);
+    if (!rows.length) return null;
+    const at = (m) => { const d = new Date(b.planted_on); d.setMonth(d.getMonth() + Math.floor(m)); d.setDate(d.getDate() + Math.round((m % 1) * 30)); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+    const now = today();
+    let nextShown = false;
+    return h('div', {}, sec(`Crop calendar · ${b.variety}`, h('a', { class: 'btn small-btn', href: '#settings-crop' }, 'Edit')),
+      card(rows.map((r) => { const d = at(r.month), past = d < now, next = !past && !nextShown; if (next) nextShown = true;
+        return h('div', { class: 'trow' + (past ? ' past' : '') }, h('span', { class: 'lmain' }, h('b', {}, r.name), h('small', {}, `Month ${r.month} · ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`)), past ? pill('Passed', '') : next ? pill('Next', 'gold') : null); })),
+      h('p', { class: 'muted small foot' }, 'A guide from the variety\'s calendar; record the real work as Jobs.'));
   }
 
   // ---------- pages still to build ----------
