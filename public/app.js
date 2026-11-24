@@ -649,6 +649,14 @@
         h('div', { class: 'tile' }, h('small', {}, 'Paid'), h('div', { class: 'h' }, rm(js.filter((j) => j.status === 'Paid').reduce((s, j) => s + Number(j.price || 0), 0))))));
       root.append(h('div', { class: 'card kvs' }, kv('Phone', contractor.phone), kv('SSM / IC', contractor.ssm_or_ic), kv('Bank', contractor.bank_name), kv('Account number', contractor.account_no), kv('Usual rates', contractor.usual_rates, true), contractor.address ? kv('Address', contractor.address, true) : null,
         h('div', { class: 'kv wide' }, h('button', { class: 'btn small-btn', type: 'button', onclick: () => contractorForm(contractor) }, 'Edit contractor details'))));
+      const unused = !js.length && !D.pays.some((p) => p.contractor_id === cid);
+      if (D.isAdmin && unused) root.append(h('button', { class: 'btn link danger-t', type: 'button', onclick: () => openSheet(`Delete ${contractor.name}?`, [{ type: 'note', label: 'This contractor has no jobs or payments, so it can be removed from your list.' }], async () => {
+        const { error } = await sb.from('contractors').delete().eq('id', cid);
+        if (error) throw error;
+        location.hash = '#jobs';
+        await refresh('Contractor deleted');
+      }, 'Delete contractor', true) }, 'Delete this contractor'));
+      else if (D.isAdmin) root.append(h('p', { class: 'muted small foot' }, 'A contractor with jobs or payments cannot be deleted, so the records stay complete.'));
     }
     if (none) root.append(h('div', { class: 'card note' }, h('p', {}, 'These jobs came from the planter\'s records. Open each one and tap ', h('strong', {}, 'Edit / complete this record'), ' to add the contractor and the price.')));
 
